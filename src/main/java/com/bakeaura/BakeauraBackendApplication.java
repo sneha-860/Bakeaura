@@ -1,4 +1,4 @@
-package com.bakeaura.bakeaura_backend;
+package com.bakeaura;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
