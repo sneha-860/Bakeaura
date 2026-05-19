@@ -1,12 +1,13 @@
 package com.bakeaura.auth;
 
+import com.bakeaura.common.Role;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component   // @Component = Spring manages this class
@@ -20,8 +21,13 @@ public class JwtUtil {
 
     // Generate a token for a user
     public String generateToken(String email) {
+        return generateToken(email, null);
+    }
+
+    public String generateToken(String email, Role role) {
         return Jwts.builder()
                 .subject(email)          // who this token is for
+                .claim("role", role == null ? null : role.name())
                 .issuedAt(new Date())    // when it was created
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())  // sign with our secret
@@ -49,8 +55,18 @@ public class JwtUtil {
         }
     }
 
+    public Role extractRole(String token) {
+        String role = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("role", String.class);
+        return role == null ? null : Role.valueOf(role);
+    }
+
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        byte[] keyBytes = secretKey.getBytes(StandardCharsets.UTF_8);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }
