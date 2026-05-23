@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -26,9 +27,23 @@ public class AuthService {
         user.setIsActive(true);
 
         User savedUser = userRepository.save(user);
-        String token = jwtUtil.generateToken(savedUser.getEmail(), savedUser.getRole());
 
-        return new AuthResponse(token, "Bearer", savedUser.getEmail(), savedUser.getRole());
+        String accessToken = jwtUtil.generateAccessToken(
+                savedUser.getEmail(),
+                savedUser.getRole()
+        );
+
+        String refreshToken = jwtUtil.generateRefreshToken(
+                savedUser.getEmail()
+        );
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                "Bearer",
+                savedUser.getEmail(),
+                savedUser.getRole()
+        );
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -39,7 +54,21 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid email or password");
         }
 
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole());
-        return new AuthResponse(token, "Bearer", user.getEmail(), user.getRole());
+        String accessToken = jwtUtil.generateAccessToken(
+                user.getEmail(),
+                user.getRole()
+        );
+
+        String refreshToken = jwtUtil.generateRefreshToken(
+                user.getEmail()
+        );
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                "Bearer",
+                user.getEmail(),
+                user.getRole()
+        );
     }
 }
