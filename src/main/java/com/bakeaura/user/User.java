@@ -1,6 +1,6 @@
 package com.bakeaura.user;
 
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.Role;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -39,6 +39,10 @@ public class User {
 
     @Column(name = "is_active")
     private Boolean isActive = true;
+
+    private Double latitude;
+
+    private Double longitude;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

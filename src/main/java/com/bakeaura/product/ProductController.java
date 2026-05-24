@@ -58,4 +58,23 @@ public class ProductController {
                 .map(p -> ResponseEntity.ok(ApiResponse.ok("Found", p)))
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<Product>> updateProduct(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductCreateDto dto,
+            Authentication auth) {
+        Product product = productService.updateProduct(id, dto, auth.getName());
+        return ResponseEntity.ok(ApiResponse.ok("Product updated", product));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<Void>> deleteProduct(
+            @PathVariable Long id,
+            Authentication auth) {
+        productService.deleteProduct(id, auth.getName());
+        return ResponseEntity.ok(ApiResponse.ok("Product deleted", null));
+    }
 }

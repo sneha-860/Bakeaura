@@ -1,19 +1,17 @@
 package com.bakeaura.order;
 
 
-import com.bakeaura.order.CreateOrderRequest;
-import com.bakeaura.order.OrderResponse;
-import com.bakeaura.order.Order;
-import com.bakeaura.order.OrderItem;
+import com.bakeaura.map.MapService;
 import com.bakeaura.product.Product;
 import com.bakeaura.user.User;
-import com.bakeaura.common.OrderStatus;
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.OrderStatus;
+import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.order.OrderRepository;
+import com.bakeaura.payment.PaymentService;
 import com.bakeaura.product.ProductRepository;
 import com.bakeaura.user.UserRepository;
+import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -35,7 +33,7 @@ public class OrderService {
     private final OrderTrackingService orderTrackingService;
 
     @Transactional
-    public OrderResponse createOrder(CreateOrderRequest request, String customerEmail) {
+    public OrderResponseDto createOrder(CreateOrderRequestDto request, String customerEmail) {
 
         User customer = userRepository.findByEmail(customerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
@@ -70,7 +68,7 @@ public class OrderService {
 
         BigDecimal total = BigDecimal.ZERO;
 
-        for (CreateOrderRequest.OrderItemRequest itemReq : request.getItems()) {
+        for (CreateOrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
             Product product = productRepository.findById(itemReq.getProductId())
                     .orElseThrow(() -> new ResourceNotFoundException("Product " + itemReq.getProductId() + " not found"));
 
@@ -100,7 +98,7 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse updateStatus(Long orderId, OrderStatus newStatus, String userEmail) {
+    public OrderResponseDto updateStatus(Long orderId, OrderStatus newStatus, String userEmail) {
 
         Order order = orderRepository.findByIdWithItems(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
@@ -136,21 +134,21 @@ public class OrderService {
         return toResponse(updated);
     }
 
-    public List<OrderResponse> getMyOrders(String customerEmail) {
+    public List<OrderResponseDto> getMyOrders(String customerEmail) {
         User customer = userRepository.findByEmail(customerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return orderRepository.findByCustomer_IdOrderByCreatedAtDesc(customer.getId())
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
-    public List<OrderResponse> getSellerOrders(String sellerEmail) {
+    public List<OrderResponseDto> getSellerOrders(String sellerEmail) {
         User seller = userRepository.findByEmail(sellerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return orderRepository.findBySeller_IdOrderByCreatedAtDesc(seller.getId())
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
-    public OrderResponse getOrderById(Long orderId, String userEmail) {
+    public OrderResponseDto getOrderById(Long orderId, String userEmail) {
         Order order = orderRepository.findByIdWithItems(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
@@ -186,9 +184,9 @@ public class OrderService {
     }
 
     // ---- Mapper ----
-    private OrderResponse toResponse(Order order) {
-        List<OrderResponse.OrderItemResponse> itemResponses = order.getItems().stream()
-                .map(item -> OrderResponse.OrderItemResponse.builder()
+    private OrderResponseDto toResponse(Order order) {
+        List<OrderResponseDto.OrderItemResponse> itemResponses = order.getItems().stream()
+                .map(item -> OrderResponseDto.OrderItemResponse.builder()
                         .productId(item.getProduct().getId())
                         .productName(item.getProduct().getName())
                         .quantity(item.getQuantity())
@@ -197,7 +195,7 @@ public class OrderService {
                         .build())
                 .collect(Collectors.toList());
 
-        return OrderResponse.builder()
+        return OrderResponseDto.builder()
                 .id(order.getId())
                 .customerName(order.getCustomer().getName())
                 .sellerName(order.getSeller().getName())

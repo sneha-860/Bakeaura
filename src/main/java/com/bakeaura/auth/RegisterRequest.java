@@ -1,6 +1,6 @@
 package com.bakeaura.auth;
 
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

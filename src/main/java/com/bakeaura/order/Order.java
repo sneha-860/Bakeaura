@@ -1,6 +1,6 @@
 package com.bakeaura.order;
 
-import com.bakeaura.common.OrderStatus;
+import com.bakeaura.enums.OrderStatus;
 import jakarta.persistence.*;
 import com.bakeaura.user.User;
 import lombok.*;

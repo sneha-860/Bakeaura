@@ -1,6 +1,6 @@
 package com.bakeaura.auth;
 
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.Role;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 

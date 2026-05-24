@@ -1,6 +1,6 @@
 package com.bakeaura.auth;
 
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.Role;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

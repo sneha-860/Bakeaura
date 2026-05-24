@@ -1,6 +1,6 @@
 package com.bakeaura.auth;
 
-import com.bakeaura.common.Role;
+import com.bakeaura.enums.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

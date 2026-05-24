@@ -7,7 +7,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-public class CreateOrderRequest {
+public class CreateOrderRequestDto {
 
     @NotNull
     private Long sellerId;

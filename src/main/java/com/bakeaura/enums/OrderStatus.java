@@ -1,4 +1,4 @@
-package com.bakeaura.common;
+package com.bakeaura.enums;
 
 public enum OrderStatus {
     PENDING,

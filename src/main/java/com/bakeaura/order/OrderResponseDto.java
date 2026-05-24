@@ -1,6 +1,6 @@
 package com.bakeaura.order;
 
-import com.bakeaura.common.OrderStatus;
+import com.bakeaura.enums.OrderStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -10,7 +10,7 @@ import java.util.List;
 
 @Data
 @Builder
-public class OrderResponse {
+public class OrderResponseDto {
     private Long id;
     private String customerName;
     private String sellerName;
