@@ -1,3 +1,7 @@
+#This file is to create the image of the srpingboot app. How to create the Docker image for your application
+
+
+
 # Stage 1: Build — compile the Java code
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
@@ -18,4 +22,6 @@ EXPOSE 8080
 # Tell Docker this container listens on port 8080
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
-# Command to start the app
+# Command to start the app   When container starts,
+                             #execute:
+                             #java -jar app.jar

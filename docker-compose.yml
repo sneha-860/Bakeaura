@@ -2,11 +2,11 @@ services:
 
   # Your Spring Boot app
   app:
-    build: .           # build using Dockerfile in current directory
+    build: .           # build using Dockerfile in current directory,create the image of the project
     ports:
       - "8080:8080"    # host_port:container_port
     environment:
-      # Override application.properties values for Docker
+      # Override application.yml values for Docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/bakeaura_db
       # Note: use "postgres" (service name below) not "localhost"
       # Inside Docker network, services talk by their service name
@@ -27,7 +27,7 @@ services:
   postgres:
     image: postgres:15
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       - POSTGRES_DB=bakeaura_db
       - POSTGRES_USER=postgres

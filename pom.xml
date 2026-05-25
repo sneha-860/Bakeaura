@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.bakeaura</groupId>
-	<artifactId>bakeaura-backend</artifactId>
+	<artifactId>bakeaura_backend</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>bakeaura-backend</name>
 	<description>BakeAura backend application</description>
