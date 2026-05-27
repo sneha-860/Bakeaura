@@ -8,9 +8,10 @@ import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.order.OrderRepository;
-import com.bakeaura.payment.PaymentRepository;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductRepository;
+import com.bakeaura.user.User;
+import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
@@ -23,33 +24,36 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 
 @Service
 @Slf4j
 public class PaymentService {
 
-    @Value("${razorpay.key-id}")
-    private String keyId;
-
-    @Value("${razorpay.key-secret}")
-    private String keySecret;
-
     @Value("${razorpay.webhook-secret}")
     private String webhookSecret;
 
+    private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
     private final OrderTrackingService orderTrackingService;
 
-    public PaymentService(PaymentRepository paymentRepository,
+    public PaymentService(RazorpayClient razorpayClient,
+                          PaymentRepository paymentRepository,
                           OrderRepository orderRepository,
                           ProductRepository productRepository,
+                          UserRepository userRepository,
                           OrderTrackingService orderTrackingService) {
+        this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.userRepository = userRepository;
         this.orderTrackingService = orderTrackingService;
     }
 
@@ -57,17 +61,12 @@ public class PaymentService {
     @Transactional
     public String createRazorpayOrder(BigDecimal amount, Long internalOrderId) {
         try {
-            RazorpayClient client = new RazorpayClient(keyId, keySecret);
-
-            // Razorpay expects amount in smallest currency unit (paise for INR)
-            int amountInPaise = amount.multiply(BigDecimal.valueOf(100)).intValue();
-
             JSONObject orderRequest = new JSONObject();
-            orderRequest.put("amount", amountInPaise);
+            orderRequest.put("amount", toPaise(amount));
             orderRequest.put("currency", "INR");
             orderRequest.put("receipt", "order_" + internalOrderId);
 
-            com.razorpay.Order razorpayOrder = client.orders.create(orderRequest);
+            com.razorpay.Order razorpayOrder = razorpayClient.orders.create(orderRequest);
             String razorpayOrderId = razorpayOrder.get("id");
 
             log.info("Created Razorpay order {} for internal order {}", razorpayOrderId, internalOrderId);
@@ -91,6 +90,25 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    public PaymentResponseDto getPaymentByOrderId(Long orderId, String userEmail) {
+        Payment payment = paymentRepository.findByOrder_Id(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Order order = payment.getOrder();
+        boolean isCustomer = order.getCustomer() != null && order.getCustomer().getId().equals(user.getId());
+        boolean isSeller = order.getSeller() != null && order.getSeller().getId().equals(user.getId());
+        boolean isAdmin = user.getRole() == com.bakeaura.enums.Role.ADMIN;
+
+        if (!isCustomer && !isSeller && !isAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("Access denied");
+        }
+
+        return toResponse(payment);
+    }
+
     // Called by the webhook controller when Razorpay notifies us of a payment
     @Transactional
     public void handleWebhook(String payload, String razorpaySignature) {
@@ -107,13 +125,15 @@ public class PaymentService {
         log.info("Received Razorpay webhook event: {}", eventType);
 
         if ("payment.captured".equals(eventType)) {
-            handlePaymentCaptured(event);
+            handlePaymentCaptured(event, razorpaySignature);
         } else if ("payment.failed".equals(eventType)) {
-            handlePaymentFailed(event);
+            handlePaymentFailed(event, razorpaySignature);
+        } else {
+            log.info("Ignoring unsupported Razorpay webhook event: {}", eventType);
         }
     }
 
-    private void handlePaymentCaptured(JSONObject event) {
+    private void handlePaymentCaptured(JSONObject event, String razorpaySignature) {
         JSONObject paymentEntity = event
                 .getJSONObject("payload")
                 .getJSONObject("payment")
@@ -141,6 +161,7 @@ public class PaymentService {
         }
 
         payment.setRazorpayPaymentId(razorpayPaymentId);
+        payment.setRazorpaySignature(razorpaySignature);
         payment.setStatus(PaymentStatus.CAPTURED);
         payment.setPaidAt(LocalDateTime.now());
         paymentRepository.save(payment);
@@ -174,15 +195,23 @@ public class PaymentService {
         }
     }
 
-    private void handlePaymentFailed(JSONObject event) {
+    private void handlePaymentFailed(JSONObject event, String razorpaySignature) {
         JSONObject paymentEntity = event
                 .getJSONObject("payload")
                 .getJSONObject("payment")
                 .getJSONObject("entity");
 
         String razorpayOrderId = paymentEntity.getString("order_id");
+        String razorpayPaymentId = paymentEntity.optString("id", null);
 
         paymentRepository.findByRazorpayOrderId(razorpayOrderId).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                log.info("Ignoring failed webhook for already captured payment {}", razorpayOrderId);
+                return;
+            }
+
+            payment.setRazorpayPaymentId(razorpayPaymentId);
+            payment.setRazorpaySignature(razorpaySignature);
             payment.setStatus(PaymentStatus.FAILED);
             paymentRepository.save(payment);
 
@@ -198,12 +227,16 @@ public class PaymentService {
     // ---- HMAC-SHA256 signature verification ----
     private boolean verifyWebhookSignature(String payload, String signature) {
         try {
+            if (signature == null || signature.isBlank()) {
+                return false;
+            }
+
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec secretKey = new SecretKeySpec(
-                    webhookSecret.getBytes("UTF-8"), "HmacSHA256");
+                    webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
             mac.init(secretKey);
 
-            byte[] hash = mac.doFinal(payload.getBytes("UTF-8"));
+            byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
 
             // Convert bytes to hex string
             StringBuilder hexString = new StringBuilder();
@@ -213,11 +246,33 @@ public class PaymentService {
                 hexString.append(hex);
             }
 
-            return hexString.toString().equals(signature);
+            return MessageDigest.isEqual(
+                    hexString.toString().getBytes(StandardCharsets.UTF_8),
+                    signature.getBytes(StandardCharsets.UTF_8)
+            );
 
         } catch (Exception e) {
             log.error("Signature verification failed: {}", e.getMessage());
             return false;
         }
+    }
+
+    int toPaise(BigDecimal amount) {
+        return amount.multiply(BigDecimal.valueOf(100))
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValueExact();
+    }
+
+    private PaymentResponseDto toResponse(Payment payment) {
+        return PaymentResponseDto.builder()
+                .id(payment.getId())
+                .orderId(payment.getOrder().getId())
+                .razorpayOrderId(payment.getRazorpayOrderId())
+                .razorpayPaymentId(payment.getRazorpayPaymentId())
+                .status(payment.getStatus())
+                .amount(payment.getAmount())
+                .createdAt(payment.getCreatedAt())
+                .paidAt(payment.getPaidAt())
+                .build();
     }
 }
