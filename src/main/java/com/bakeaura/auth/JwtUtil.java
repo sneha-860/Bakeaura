@@ -35,6 +35,9 @@ public class JwtUtil {
                 // custom role claim
                 .claim("role", role.name())
 
+                // token purpose
+                .claim("tokenType", "access")
+
                 // token creation time
                 .issuedAt(new Date())
 
@@ -61,6 +64,9 @@ public class JwtUtil {
 
                 // token owner
                 .subject(email)
+
+                // token purpose
+                .claim("tokenType", "refresh")
 
                 // token creation time
                 .issuedAt(new Date())
@@ -151,6 +157,26 @@ public class JwtUtil {
         return role == null
                 ? null
                 : Role.valueOf(role);
+    }
+
+
+    // Check whether token is a refresh token
+    public boolean isRefreshToken(String token) {
+
+        String tokenType = extractAllClaims(token)
+                .get("tokenType", String.class);
+
+        return "refresh".equals(tokenType);
+    }
+
+
+    // Check whether token is an access token
+    public boolean isAccessToken(String token) {
+
+        String tokenType = extractAllClaims(token)
+                .get("tokenType", String.class);
+
+        return "access".equals(tokenType);
     }
 
 

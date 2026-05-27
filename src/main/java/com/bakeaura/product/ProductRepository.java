@@ -20,6 +20,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByCategoryId(Long categoryId);
 
+    boolean existsByCategoryId(Long categoryId);
+
     List<Product> findByIsAvailableTrue();
     // → SELECT * FROM products WHERE is_available = true
 

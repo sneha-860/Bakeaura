@@ -1,6 +1,7 @@
 package com.bakeaura.payment;
 
 import com.bakeaura.order.Order;
+import com.bakeaura.order.OrderItem;
 import com.bakeaura.payment.Payment;
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.PaymentStatus;
@@ -8,6 +9,8 @@ import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.order.OrderRepository;
 import com.bakeaura.payment.PaymentRepository;
+import com.bakeaura.product.Product;
+import com.bakeaura.product.ProductRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
@@ -37,13 +40,16 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
     private final OrderTrackingService orderTrackingService;
 
     public PaymentService(PaymentRepository paymentRepository,
                           OrderRepository orderRepository,
+                          ProductRepository productRepository,
                           OrderTrackingService orderTrackingService) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
         this.orderTrackingService = orderTrackingService;
     }
 
@@ -71,6 +77,18 @@ public class PaymentService {
             log.error("Failed to create Razorpay order: {}", e.getMessage());
             throw new RuntimeException("Payment gateway error: " + e.getMessage());
         }
+    }
+
+    @Transactional
+    public Payment createPendingPayment(Order order, String razorpayOrderId) {
+        Payment payment = Payment.builder()
+                .order(order)
+                .razorpayOrderId(razorpayOrderId)
+                .amount(order.getTotalAmount())
+                .status(PaymentStatus.PENDING)
+                .build();
+
+        return paymentRepository.save(payment);
     }
 
     // Called by the webhook controller when Razorpay notifies us of a payment
@@ -117,6 +135,11 @@ public class PaymentService {
                             .build();
                 });
 
+        if (payment.getStatus() == PaymentStatus.CAPTURED) {
+            log.info("Payment {} was already captured; ignoring duplicate webhook", razorpayPaymentId);
+            return;
+        }
+
         payment.setRazorpayPaymentId(razorpayPaymentId);
         payment.setStatus(PaymentStatus.CAPTURED);
         payment.setPaidAt(LocalDateTime.now());
@@ -124,6 +147,7 @@ public class PaymentService {
 
         // Auto-confirm the order
         Order order = payment.getOrder();
+        reduceStock(order);
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
 
@@ -131,6 +155,23 @@ public class PaymentService {
         orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
 
         log.info("Payment captured for order {}", order.getId());
+    }
+
+    private void reduceStock(Order order) {
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+
+            if (product.getStockQuantity() == null) {
+                continue;
+            }
+
+            if (item.getQuantity() > product.getStockQuantity()) {
+                throw new BadRequestException("Insufficient stock for product " + product.getId());
+            }
+
+            product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+            productRepository.save(product);
+        }
     }
 
     private void handlePaymentFailed(JSONObject event) {

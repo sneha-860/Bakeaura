@@ -2,6 +2,8 @@ package com.bakeaura.auth;
 
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
+import com.bakeaura.enums.Role;
+import com.bakeaura.exception.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -13,17 +15,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final RefreshTokenStore refreshTokenStore;
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email is already registered");
+            throw new BadRequestException("Email is already registered");
         }
 
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(request.getRole());
+        user.setRole(Role.CUSTOMER);
         user.setIsActive(true);
 
         User savedUser = userRepository.save(user);
@@ -36,6 +39,7 @@ public class AuthService {
         String refreshToken = jwtUtil.generateRefreshToken(
                 savedUser.getEmail()
         );
+        refreshTokenStore.store(savedUser.getEmail(), refreshToken);
 
         return new AuthResponse(
                 accessToken,
@@ -48,10 +52,14 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid email or password"));
+                .orElseThrow(() -> new BadRequestException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("Invalid email or password");
+            throw new BadRequestException("Invalid email or password");
+        }
+
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            throw new BadRequestException("User account is inactive");
         }
 
         String accessToken = jwtUtil.generateAccessToken(
@@ -62,6 +70,7 @@ public class AuthService {
         String refreshToken = jwtUtil.generateRefreshToken(
                 user.getEmail()
         );
+        refreshTokenStore.store(user.getEmail(), refreshToken);
 
         return new AuthResponse(
                 accessToken,
@@ -70,5 +79,54 @@ public class AuthService {
                 user.getEmail(),
                 user.getRole()
         );
+    }
+
+    public AuthResponse refresh(RefreshTokenRequest request) {
+        String refreshToken = request.getRefreshToken();
+
+        if (!jwtUtil.isTokenValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
+            throw new BadRequestException("Invalid refresh token");
+        }
+
+        String email = jwtUtil.extractEmail(refreshToken);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
+
+        if (!refreshTokenStore.matches(user.getEmail(), refreshToken)) {
+            throw new BadRequestException("Invalid refresh token");
+        }
+
+        if (!Boolean.TRUE.equals(user.getIsActive())) {
+            throw new BadRequestException("User account is inactive");
+        }
+
+        String accessToken = jwtUtil.generateAccessToken(
+                user.getEmail(),
+                user.getRole()
+        );
+
+        String newRefreshToken = jwtUtil.generateRefreshToken(
+                user.getEmail()
+        );
+        refreshTokenStore.store(user.getEmail(), newRefreshToken);
+
+        return new AuthResponse(
+                accessToken,
+                newRefreshToken,
+                "Bearer",
+                user.getEmail(),
+                user.getRole()
+        );
+    }
+
+    public void logout(LogoutRequest request) {
+        String refreshToken = request.getRefreshToken();
+
+        if (!jwtUtil.isTokenValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
+            throw new BadRequestException("Invalid refresh token");
+        }
+
+        String email = jwtUtil.extractEmail(refreshToken);
+        refreshTokenStore.revoke(email);
     }
 }

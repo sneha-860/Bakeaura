@@ -46,8 +46,10 @@ public class OrderService {
         }
 
         // ---- Validate delivery radius ----
-        // Get seller's location (assumes seller entity has latitude/longitude)
-        double distanceKm = mapService.calculateDistance(
+        validateLocation(seller.getLatitude(), seller.getLongitude(), "Seller location is not configured");
+        validateLocation(request.getDeliveryLatitude(), request.getDeliveryLongitude(), "Delivery location is required");
+
+        double distanceKm = mapService.calculateEstimatedRoadDistance(
                 seller.getLatitude(), seller.getLongitude(),
                 request.getDeliveryLatitude(), request.getDeliveryLongitude()
         );
@@ -76,6 +78,7 @@ public class OrderService {
             if (!product.getSeller().getId().equals(seller.getId())) {
                 throw new BadRequestException("Product " + product.getId() + " does not belong to the seller");
             }
+            validateProductForOrder(product, itemReq.getQuantity());
 
             OrderItem item = OrderItem.builder()
                     .product(product)
@@ -88,13 +91,14 @@ public class OrderService {
         }
 
         order.setTotalAmount(total);
+        Order saved = orderRepository.save(order);
 
         // ---- Create Razorpay order ----
-        String razorpayOrderId = paymentService.createRazorpayOrder(total, order.getId());
-        order.setRazorpayOrderId(razorpayOrderId);
+        String razorpayOrderId = paymentService.createRazorpayOrder(total, saved.getId());
+        saved.setRazorpayOrderId(razorpayOrderId);
+        paymentService.createPendingPayment(saved, razorpayOrderId);
 
-        Order saved = orderRepository.save(order);
-        return toResponse(saved);
+        return toResponse(orderRepository.save(saved));
     }
 
     @Transactional
@@ -119,6 +123,9 @@ public class OrderService {
 
         // If confirming, set estimated delivery time
         if (newStatus == OrderStatus.CONFIRMED) {
+            validateLocation(order.getSeller().getLatitude(), order.getSeller().getLongitude(), "Seller location is not configured");
+            validateLocation(order.getDeliveryLatitude(), order.getDeliveryLongitude(), "Delivery location is not configured");
+
             Integer eta = mapService.getEstimatedDeliveryMinutes(
                     order.getSeller().getLatitude(), order.getSeller().getLongitude(),
                     order.getDeliveryLatitude(), order.getDeliveryLongitude()
@@ -180,6 +187,24 @@ public class OrderService {
             throw new BadRequestException(
                     "Cannot transition from " + current + " to " + next
             );
+        }
+    }
+
+    private void validateLocation(Double latitude, Double longitude, String message) {
+        if (latitude == null || longitude == null) {
+            throw new BadRequestException(message);
+        }
+    }
+
+    private void validateProductForOrder(Product product, Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new BadRequestException("Quantity must be at least 1");
+        }
+        if (!Boolean.TRUE.equals(product.getIsAvailable())) {
+            throw new BadRequestException("Product " + product.getId() + " is not available");
+        }
+        if (product.getStockQuantity() != null && quantity > product.getStockQuantity()) {
+            throw new BadRequestException("Requested quantity exceeds available stock for product " + product.getId());
         }
     }
 
