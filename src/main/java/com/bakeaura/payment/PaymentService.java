@@ -13,6 +13,7 @@ import com.bakeaura.product.ProductRepository;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
+import com.bakeaura.notification.NotificationService;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import lombok.extern.slf4j.Slf4j;
@@ -36,25 +37,34 @@ public class PaymentService {
     @Value("${razorpay.webhook-secret}")
     private String webhookSecret;
 
+    @Value("${razorpay.key-id}")
+    private String keyId;
+
+    @Value("${razorpay.key-secret}")
+    private String keySecret;
+
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final OrderTrackingService orderTrackingService;
+    private final NotificationService notificationService;
 
     public PaymentService(RazorpayClient razorpayClient,
                           PaymentRepository paymentRepository,
                           OrderRepository orderRepository,
                           ProductRepository productRepository,
                           UserRepository userRepository,
-                          OrderTrackingService orderTrackingService) {
+                          OrderTrackingService orderTrackingService,
+                          NotificationService notificationService) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.orderTrackingService = orderTrackingService;
+        this.notificationService = notificationService;
     }
 
     // Called by OrderService when creating an order
@@ -104,6 +114,45 @@ public class PaymentService {
 
         if (!isCustomer && !isSeller && !isAdmin) {
             throw new org.springframework.security.access.AccessDeniedException("Access denied");
+        }
+
+        return toResponse(payment);
+    }
+
+    public RazorpayConfigResponse getPaymentConfig() {
+        return new RazorpayConfigResponse(keyId, "INR");
+    }
+
+    @Transactional
+    public PaymentResponseDto verifyPayment(VerifyPaymentRequest request, String userEmail) {
+        Payment payment = paymentRepository.findByRazorpayOrderId(request.getRazorpayOrderId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Order order = payment.getOrder();
+        if (order.getCustomer() == null || !order.getCustomer().getId().equals(user.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Access denied");
+        }
+
+        String payload = request.getRazorpayOrderId() + "|" + request.getRazorpayPaymentId();
+        if (!verifySignature(payload, request.getRazorpaySignature(), keySecret)) {
+            throw new BadRequestException("Invalid payment signature");
+        }
+
+        if (payment.getStatus() != PaymentStatus.CAPTURED) {
+            payment.setRazorpayPaymentId(request.getRazorpayPaymentId());
+            payment.setRazorpaySignature(request.getRazorpaySignature());
+            payment.setStatus(PaymentStatus.CAPTURED);
+            payment.setPaidAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+
+            reduceStock(order);
+            order.setStatus(OrderStatus.CONFIRMED);
+            orderRepository.save(order);
+            orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
+            notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED", "Payment captured for order #" + order.getId(), order.getId());
         }
 
         return toResponse(payment);
@@ -174,6 +223,7 @@ public class PaymentService {
 
         // Broadcast the status change via WebSocket
         orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
+        notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED", "Payment captured for order #" + order.getId(), order.getId());
 
         log.info("Payment captured for order {}", order.getId());
     }
@@ -219,6 +269,7 @@ public class PaymentService {
             Order order = payment.getOrder();
             order.setStatus(OrderStatus.CANCELLED);
             orderRepository.save(order);
+            notifyIfUserPresent(order.getCustomer(), "PAYMENT_FAILED", "Payment failed for order #" + order.getId(), order.getId());
 
             log.warn("Payment failed for order {}", order.getId());
         });
@@ -226,6 +277,10 @@ public class PaymentService {
 
     // ---- HMAC-SHA256 signature verification ----
     private boolean verifyWebhookSignature(String payload, String signature) {
+        return verifySignature(payload, signature, webhookSecret);
+    }
+
+    private boolean verifySignature(String payload, String signature, String secret) {
         try {
             if (signature == null || signature.isBlank()) {
                 return false;
@@ -233,7 +288,7 @@ public class PaymentService {
 
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec secretKey = new SecretKeySpec(
-                    webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+                    secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
             mac.init(secretKey);
 
             byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
@@ -261,6 +316,12 @@ public class PaymentService {
         return amount.multiply(BigDecimal.valueOf(100))
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValueExact();
+    }
+
+    private void notifyIfUserPresent(User user, String type, String message, Long relatedId) {
+        if (user != null && user.getEmail() != null) {
+            notificationService.notifyUser(user.getEmail(), type, message, relatedId);
+        }
     }
 
     private PaymentResponseDto toResponse(Payment payment) {

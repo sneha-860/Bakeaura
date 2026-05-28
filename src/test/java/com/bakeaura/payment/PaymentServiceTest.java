@@ -12,6 +12,7 @@ import com.bakeaura.product.ProductRepository;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
+import com.bakeaura.notification.NotificationService;
 import com.razorpay.RazorpayClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,9 @@ class PaymentServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     private PaymentService paymentService;
 
     @BeforeEach
@@ -62,7 +66,8 @@ class PaymentServiceTest {
                 orderRepository,
                 productRepository,
                 userRepository,
-                orderTrackingService
+                orderTrackingService,
+                notificationService
         );
         ReflectionTestUtils.setField(paymentService, "webhookSecret", "test_secret");
     }

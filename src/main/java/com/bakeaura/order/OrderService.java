@@ -2,6 +2,10 @@ package com.bakeaura.order;
 
 
 import com.bakeaura.map.MapService;
+import com.bakeaura.cart.CartDto;
+import com.bakeaura.cart.CartItemDto;
+import com.bakeaura.cart.CartService;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.product.Product;
 import com.bakeaura.user.User;
 import com.bakeaura.enums.OrderStatus;
@@ -31,6 +35,8 @@ public class OrderService {
     private final MapService mapService;
     private final PaymentService paymentService;
     private final OrderTrackingService orderTrackingService;
+    private final CartService cartService;
+    private final NotificationService notificationService;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, String customerEmail) {
@@ -98,7 +104,35 @@ public class OrderService {
         saved.setRazorpayOrderId(razorpayOrderId);
         paymentService.createPendingPayment(saved, razorpayOrderId);
 
+        notificationService.notifyUser(
+                seller.getEmail(),
+                "ORDER_CREATED",
+                "New order #" + saved.getId() + " has been placed.",
+                saved.getId()
+        );
+
         return toResponse(orderRepository.save(saved));
+    }
+
+    @Transactional
+    public OrderResponseDto createOrderFromCart(CreateOrderFromCartRequestDto request, String customerEmail) {
+        CartDto cart = cartService.getCartWithoutSync(customerEmail);
+        if (cart.getItems().isEmpty()) {
+            throw new BadRequestException("Cart is empty");
+        }
+
+        CreateOrderRequestDto orderRequest = new CreateOrderRequestDto();
+        orderRequest.setSellerId(request.getSellerId());
+        orderRequest.setDeliveryAddress(request.getDeliveryAddress());
+        orderRequest.setDeliveryLatitude(request.getDeliveryLatitude());
+        orderRequest.setDeliveryLongitude(request.getDeliveryLongitude());
+        orderRequest.setItems(cart.getItems().stream()
+                .map(this::toOrderItemRequest)
+                .toList());
+
+        OrderResponseDto response = createOrder(orderRequest, customerEmail);
+        cartService.clearCart(customerEmail);
+        return response;
     }
 
     @Transactional
@@ -137,6 +171,12 @@ public class OrderService {
 
         // Broadcast status update via WebSocket to all subscribers of this order
         orderTrackingService.broadcastStatusUpdate(orderId, newStatus);
+        notificationService.notifyUser(
+                order.getCustomer().getEmail(),
+                "ORDER_STATUS",
+                "Order #" + orderId + " status changed to " + newStatus,
+                orderId
+        );
 
         return toResponse(updated);
     }
@@ -148,10 +188,13 @@ public class OrderService {
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
-    public List<OrderResponseDto> getSellerOrders(String sellerEmail) {
+    public List<OrderResponseDto> getSellerOrders(String sellerEmail, OrderStatus status) {
         User seller = userRepository.findByEmail(sellerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return orderRepository.findBySeller_IdOrderByCreatedAtDesc(seller.getId())
+        List<Order> orders = status == null
+                ? orderRepository.findBySeller_IdOrderByCreatedAtDesc(seller.getId())
+                : orderRepository.findBySeller_IdAndStatusOrderByCreatedAtDesc(seller.getId(), status);
+        return orders
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
@@ -171,6 +214,39 @@ public class OrderService {
         }
 
         return toResponse(order);
+    }
+
+    @Transactional
+    public OrderResponseDto cancelOrder(Long orderId, String customerEmail) {
+        Order order = orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        User customer = userRepository.findByEmail(customerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.CONFIRMED) {
+            throw new BadRequestException("Order cannot be cancelled at this stage");
+        }
+
+        order.setStatus(OrderStatus.CANCELLED);
+        Order updated = orderRepository.save(order);
+        orderTrackingService.broadcastStatusUpdate(orderId, OrderStatus.CANCELLED);
+        notificationService.notifyUser(
+                order.getSeller().getEmail(),
+                "ORDER_CANCELLED",
+                "Order #" + orderId + " was cancelled by the customer.",
+                orderId
+        );
+        return toResponse(updated);
+    }
+
+    private CreateOrderRequestDto.OrderItemRequest toOrderItemRequest(CartItemDto cartItem) {
+        CreateOrderRequestDto.OrderItemRequest item = new CreateOrderRequestDto.OrderItemRequest();
+        item.setProductId(cartItem.getProductId());
+        item.setQuantity(cartItem.getQuantity());
+        return item;
     }
 
     // ---- State machine: enforce valid transitions ----

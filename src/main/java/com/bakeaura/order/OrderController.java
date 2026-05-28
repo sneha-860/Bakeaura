@@ -29,6 +29,15 @@ public class OrderController {
                 .body(ApiResponse.ok("Order created", orderService.createOrder(request, authentication.getName())));
     }
 
+    @PostMapping("/from-cart")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<OrderResponseDto>> createOrderFromCart(
+            @Valid @RequestBody CreateOrderFromCartRequestDto request,
+            Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Order created", orderService.createOrderFromCart(request, authentication.getName())));
+    }
+
     @PatchMapping("/{orderId}/status")
     @PreAuthorize("hasAnyRole('SELLER', 'ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponseDto>> updateStatus(
@@ -47,8 +56,10 @@ public class OrderController {
 
     @GetMapping("/seller-orders")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<ApiResponse<List<OrderResponseDto>>> getSellerOrders(Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok("Seller orders fetched", orderService.getSellerOrders(authentication.getName())));
+    public ResponseEntity<ApiResponse<List<OrderResponseDto>>> getSellerOrders(
+            @RequestParam(required = false) OrderStatus status,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok("Seller orders fetched", orderService.getSellerOrders(authentication.getName(), status)));
     }
 
     @GetMapping("/{orderId}")
@@ -57,5 +68,13 @@ public class OrderController {
             @PathVariable Long orderId,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Order fetched", orderService.getOrderById(orderId, authentication.getName())));
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<OrderResponseDto>> cancelOrder(
+            @PathVariable Long orderId,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok("Order cancelled", orderService.cancelOrder(orderId, authentication.getName())));
     }
 }

@@ -171,7 +171,7 @@ class OrderControllerTest {
     @Test
     @WithMockUser(username = "seller@example.com", roles = "SELLER")
     void sellerCanGetSellerOrders() throws Exception {
-        when(orderService.getSellerOrders("seller@example.com"))
+        when(orderService.getSellerOrders("seller@example.com", null))
                 .thenReturn(List.of(response(OrderStatus.CONFIRMED)));
 
         mockMvc.perform(get("/api/orders/seller-orders"))
@@ -179,7 +179,7 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].status").value("CONFIRMED"));
 
-        verify(orderService).getSellerOrders("seller@example.com");
+        verify(orderService).getSellerOrders("seller@example.com", null);
     }
 
     @Test

@@ -5,6 +5,8 @@ import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.map.MapService;
+import com.bakeaura.cart.CartService;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.payment.PaymentService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductRepository;
@@ -48,6 +50,12 @@ class OrderServiceTest {
     @Mock
     private OrderTrackingService orderTrackingService;
 
+    @Mock
+    private CartService cartService;
+
+    @Mock
+    private NotificationService notificationService;
+
     private OrderService orderService;
 
     @BeforeEach
@@ -58,7 +66,9 @@ class OrderServiceTest {
                 userRepository,
                 mapService,
                 paymentService,
-                orderTrackingService
+                orderTrackingService,
+                cartService,
+                notificationService
         );
     }
 
@@ -90,6 +100,7 @@ class OrderServiceTest {
         assertThat(response.getTotalAmount()).isEqualByComparingTo("200");
         assertThat(response.getRazorpayOrderId()).isEqualTo("order_razorpay");
         verify(paymentService).createPendingPayment(any(Order.class), eq("order_razorpay"));
+        verify(notificationService).notifyUser(eq("seller@example.com"), eq("ORDER_CREATED"), any(), eq(100L));
         verify(orderRepository, times(2)).save(any(Order.class));
     }
 
@@ -210,6 +221,7 @@ class OrderServiceTest {
         assertThat(response.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         assertThat(response.getEstimatedDeliveryMinutes()).isEqualTo(35);
         verify(orderTrackingService).broadcastStatusUpdate(100L, OrderStatus.CONFIRMED);
+        verify(notificationService).notifyUser(eq("customer@example.com"), eq("ORDER_STATUS"), any(), eq(100L));
     }
 
     @Test

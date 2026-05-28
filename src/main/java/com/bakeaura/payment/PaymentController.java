@@ -1,6 +1,7 @@
 package com.bakeaura.payment;
 
 import com.bakeaura.common.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +40,21 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Payment fetched",
                 paymentService.getPaymentByOrderId(orderId, authentication.getName())
+        ));
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<ApiResponse<RazorpayConfigResponse>> getPaymentConfig() {
+        return ResponseEntity.ok(ApiResponse.ok("Payment config fetched", paymentService.getPaymentConfig()));
+    }
+
+    @PostMapping("/verify")
+    public ResponseEntity<ApiResponse<PaymentResponseDto>> verifyPayment(
+            @Valid @RequestBody VerifyPaymentRequest request,
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Payment verified",
+                paymentService.verifyPayment(request, authentication.getName())
         ));
     }
 }

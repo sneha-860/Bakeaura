@@ -36,6 +36,15 @@ public class CartService {
         return getCartForUser(user);
     }
 
+    public CartDto getCartWithoutSync(String userEmail) {
+        User user = getUserByEmail(userEmail);
+        Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
+        if (cached instanceof CartDto cart) {
+            return cart;
+        }
+        return new CartDto(user.getEmail(), new java.util.ArrayList<>());
+    }
+
     private CartDto getCartForUser(User user) {
         Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
         if (cached instanceof CartDto cart) {
