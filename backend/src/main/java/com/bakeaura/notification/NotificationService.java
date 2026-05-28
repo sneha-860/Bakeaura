@@ -1,0 +1,86 @@
+package com.bakeaura.notification;
+
+import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.user.User;
+import com.bakeaura.user.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class NotificationService {
+    private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public List<NotificationDto> getNotifications(String email) {
+        User user = getUser(email);
+        return notificationRepository.findByUserOrderByCreatedAtDesc(user).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    public long getUnreadCount(String email) {
+        return notificationRepository.countByUserAndReadFalse(getUser(email));
+    }
+
+    @Transactional
+    public NotificationDto markRead(String email, Long id) {
+        User user = getUser(email);
+        Notification notification = getOwnedNotification(id, user);
+        notification.setRead(true);
+        return toDto(notificationRepository.save(notification));
+    }
+
+    @Transactional
+    public void markAllRead(String email) {
+        User user = getUser(email);
+        notificationRepository.findByUserOrderByCreatedAtDesc(user).forEach(notification -> {
+            notification.setRead(true);
+            notificationRepository.save(notification);
+        });
+    }
+
+    @Transactional
+    public NotificationDto notifyUser(String email, String type, String message, Long relatedId) {
+        User user = getUser(email);
+        Notification notification = new Notification();
+        notification.setUser(user);
+        notification.setType(type);
+        notification.setMessage(message);
+        notification.setRelatedId(relatedId);
+        NotificationDto dto = toDto(notificationRepository.save(notification));
+        messagingTemplate.convertAndSend("/topic/users/" + user.getId() + "/notifications", dto);
+        return dto;
+    }
+
+    private Notification getOwnedNotification(Long id, User user) {
+        Notification notification = notificationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Notification not found"));
+        if (!notification.getUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return notification;
+    }
+
+    private User getUser(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+    private NotificationDto toDto(Notification notification) {
+        return new NotificationDto(
+                notification.getId(),
+                notification.getType(),
+                notification.getMessage(),
+                notification.getRelatedId(),
+                notification.getRead(),
+                notification.getCreatedAt()
+        );
+    }
+}
