@@ -1,0 +1,52 @@
+services:
+
+  # Your Spring Boot app
+  app:
+    build: ./backend          # build using Dockerfile in current directory,create the image of the project
+    ports:
+      - "8080:8080"    # host_port:container_port
+    environment:
+      # Override application.yml values for Docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/bakeaura_db
+      # Note: use "postgres" (service name below) not "localhost"
+      # Inside Docker network, services talk by their service name
+      - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+      - DELIVERY_MAX_RADIUS_KM=${DELIVERY_MAX_RADIUS_KM}
+      - DELIVERY_AVERAGE_SPEED_KMPH=${DELIVERY_AVERAGE_SPEED_KMPH}
+      - DELIVERY_ROAD_DISTANCE_FACTOR=${DELIVERY_ROAD_DISTANCE_FACTOR}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_CORS_ALLOWED_ORIGINS=${APP_CORS_ALLOWED_ORIGINS}
+    depends_on:
+      - postgres
+      - redis
+    # Wait for postgres and redis to start before starting the app
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=bakeaura_db
+      - POSTGRES_USER=${SPRING_DATASOURCE_USERNAME}
+      - POSTGRES_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Named volume: data persists even when container stops
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    # Alpine = smaller image size, same functionality
+
+volumes:
+  postgres_data:
+  # Docker manages this volume on your machine

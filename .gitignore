@@ -1,0 +1,47 @@
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# --- Environment / Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Node / Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/.nuxt/
+frontend/.cache/
+frontend/coverage/
+# If frontend folder is not created yet, these also cover root-level node projects:
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Java / Backend ---
+backend/target/
+backend/build/
+backend/.mvn/wrapper/maven-wrapper.jar
+# Common Java build output anywhere in repo:
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# --- Generic binaries/temp ---
+*.class
+*.jar
+*.war
+*.ear
+tmp/
+temp/
