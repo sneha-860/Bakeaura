@@ -32,6 +32,23 @@ razorpay:
   key-secret: ${RAZORPAY_KEY_SECRET:your_secret}
   webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:your_webhook_secret}
 
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:YOUR_CLOUD_NAME_HERE}
+  api-key: ${CLOUDINARY_API_KEY:YOUR_API_KEY_HERE}
+  api-secret: ${CLOUDINARY_API_SECRET:YOUR_API_SECRET_HERE}
+
+spring:
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 8
+        queue-capacity: 100
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
