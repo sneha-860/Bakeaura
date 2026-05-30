@@ -1,5 +1,6 @@
 package com.bakeaura.product;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -20,5 +21,6 @@ public class ProductDto {
     private String sellerName;
     private Long categoryId;
     private String categoryName;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 }

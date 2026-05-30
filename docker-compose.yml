@@ -1,5 +1,15 @@
 services:
 
+  # Frontend React app
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - bakeaura-network
+
   # Your Spring Boot app
   app:
     build: ./backend          # build using Dockerfile in current directory,create the image of the project
@@ -25,6 +35,8 @@ services:
     depends_on:
       - postgres
       - redis
+    networks:
+      - bakeaura-network
     # Wait for postgres and redis to start before starting the app
 
   # PostgreSQL database
@@ -39,6 +51,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Named volume: data persists even when container stops
+    networks:
+      - bakeaura-network
 
   # Redis cache
   redis:
@@ -46,7 +60,13 @@ services:
     ports:
       - "6379:6379"
     # Alpine = smaller image size, same functionality
+    networks:
+      - bakeaura-network
 
 volumes:
   postgres_data:
   # Docker manages this volume on your machine
+
+networks:
+  bakeaura-network:
+    driver: bridge

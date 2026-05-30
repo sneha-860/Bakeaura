@@ -828,3 +828,55 @@ textarea.input { resize: vertical; }
   .account-path { grid-template-columns: 1fr; }
   .footer { flex-direction: column; }
 }
+
+/* Loading and Error States */
+.loading-state,
+.error-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--mocha);
+  font-size: 1rem;
+}
+
+.error-state {
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  margin: 20px 0;
+  padding: 20px;
+}
+
+/* Admin Action Cards */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background: var(--warm-white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--espresso);
+  transition: all 0.2s ease;
+}
+
+.action-card:hover {
+  border-color: var(--caramel);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-2px);
+}
+
+.action-card span {
+  font-weight: 500;
+  font-size: 0.95rem;
+}

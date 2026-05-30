@@ -1,6 +1,7 @@
 import { Package, ShoppingBag, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,6 +12,7 @@ import { ordersApi } from '../api/orders';
 import { productsApi } from '../api/products';
 import { roleApplicationsApi } from '../api/roleApplications';
 import { usersApi } from '../api/users';
+import { useAuthStore } from '../store/useAuthStore';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
@@ -97,35 +99,156 @@ export function IncomingOrdersPage() {
 
 export function AdminDashboardPage() {
   const [dashboard, setDashboard] = useState(null);
-  useEffect(() => { adminApi.dashboard().then(setDashboard).catch(() => setDashboard(null)); }, []);
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><Stats cards={Object.entries(dashboard || {}).map(([key, value]) => [titleCase(key), value, <Package />])} /></div>;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    adminApi.dashboard()
+      .then(setDashboard)
+      .catch((err) => {
+        setError(err?.response?.data?.message || 'Failed to load dashboard');
+        setDashboard(null);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+  
+  if (loading) {
+    return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="loading-state">Loading dashboard...</div></div>;
+  }
+  
+  if (error) {
+    return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="error-state">{error}</div></div>;
+  }
+  
+  const statCards = [
+    { label: 'Total Users', value: dashboard?.users || 0, icon: <Users size={24} />, color: '#3b82f6' },
+    { label: 'Products', value: dashboard?.products || 0, icon: <Package size={24} />, color: '#10b981' },
+    { label: 'Orders', value: dashboard?.orders || 0, icon: <ShoppingBag size={24} />, color: '#f59e0b' },
+    { label: 'Payments', value: dashboard?.payments || 0, icon: <Package size={24} />, color: '#8b5cf6' },
+    { label: 'Categories', value: dashboard?.categories || 0, icon: <Package size={24} />, color: '#ec4899' }
+  ];
+  
+  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="stats-grid">{statCards.map((card) => <article className="stat-card" key={card.label} style={{ borderColor: card.color }}><span style={{ color: card.color }}>{card.icon}</span><strong>{card.value}</strong><small>{card.label}</small></article>)}</div><section className="section"><h2>Quick Actions</h2><div className="action-grid"><Link to="/admin/users" className="action-card"><Users size={32} /><span>Manage Users</span></Link><Link to="/admin/applications" className="action-card"><Package size={32} /><span>Review Applications</span></Link></div></section></div>;
 }
 
 export function AdminUsersPage() {
   const [role, setRole] = useState('');
   const [users, setUsers] = useState([]);
-  const load = () => adminApi.users(role).then(setUsers).catch(() => setUsers([]));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
+  
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    adminApi.users(role)
+      .then(setUsers)
+      .catch((err) => {
+        setError(err?.response?.data?.message || 'Failed to load users');
+        setUsers([]);
+      })
+      .finally(() => setLoading(false));
+  };
+  
   useEffect(load, [role]);
-  async function toggle(user) { await adminApi.updateUserStatus(user.id, !user.isActive); load(); }
-  async function changeRole(user, nextRole) { await adminApi.updateUserRole(user.id, nextRole); load(); }
-  async function remove(id) { await adminApi.removeUser(id); load(); }
-  return <div className="page"><section className="section-head"><div><p className="eyebrow">Admin</p><h1>Users</h1></div><select className="input compact-input" value={role} onChange={(event) => setRole(event.target.value)}><option value="">All roles</option>{Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}</select></section><div className="table-list">{users.map((user) => <article className="table-row" key={user.id}><div><strong>{user.name}</strong><small>{user.email}</small></div><select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)}>{Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}</select><span className={`pill ${user.isActive ? 'success' : 'danger'}`}>{user.isActive ? 'Active' : 'Inactive'}</span><Button variant="ghost" onClick={() => toggle(user)}>{user.isActive ? 'Deactivate' : 'Activate'}</Button><Button variant="ghost" onClick={() => remove(user.id)}>Delete</Button></article>)}</div></div>;
+  
+  async function toggle(user) {
+    if (!window.confirm(`Are you sure you want to ${user.isActive ? 'deactivate' : 'activate'} ${user.name}?`)) return;
+    setActionLoading(user.id);
+    try {
+      await adminApi.updateUserStatus(user.id, !user.isActive);
+      load();
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to update user status');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+  
+  async function changeRole(user, nextRole) {
+    if (!window.confirm(`Are you sure you want to change ${user.name}'s role to ${nextRole}?`)) return;
+    setActionLoading(user.id);
+    try {
+      await adminApi.updateUserRole(user.id, nextRole);
+      load();
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to update user role');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+  
+  async function remove(id) {
+    const user = users.find(u => u.id === id);
+    if (!window.confirm(`Are you sure you want to delete ${user?.name}? This action cannot be undone.`)) return;
+    setActionLoading(id);
+    try {
+      await adminApi.removeUser(id);
+      load();
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+  
+  return <div className="page"><section className="section-head"><div><p className="eyebrow">Admin</p><h1>Users</h1></div><select className="input compact-input" value={role} onChange={(event) => setRole(event.target.value)}><option value="">All roles</option>{Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}</select></section>{loading ? <div className="loading-state">Loading users...</div> : error ? <div className="error-state">{error}</div> : <><div className="table-list">{users.map((user) => <article className="table-row" key={user.id}><div><strong>{user.name}</strong><small>{user.email}</small></div><select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)} disabled={actionLoading === user.id}>{Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}</select><span className={`pill ${user.isActive ? 'success' : 'danger'}`}>{user.isActive ? 'Active' : 'Inactive'}</span><Button variant="ghost" onClick={() => toggle(user)} disabled={actionLoading === user.id}>{actionLoading === user.id ? '...' : (user.isActive ? 'Deactivate' : 'Activate')}</Button><Button variant="ghost" onClick={() => remove(user.id)} disabled={actionLoading === user.id}>{actionLoading === user.id ? '...' : 'Delete'}</Button></article>)}{!users.length ? <EmptyState title="No users found" /> : null}</div></>}</div>;
 }
 
 export function AdminApplicationsPage() {
+  const { role } = useAuthStore();
   const [status, setStatus] = useState(ApplicationStatus.PENDING);
   const [applications, setApplications] = useState([]);
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState('');
-  const load = () => roleApplicationsApi.adminList(status).then(setApplications).catch(() => setApplications([]));
-  useEffect(load, [status]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    console.log('Loading applications with status:', status);
+    console.log('Current user role:', role);
+    roleApplicationsApi.adminList(status)
+      .then((data) => {
+        console.log('Applications loaded:', data);
+        setApplications(data);
+      })
+      .catch((err) => {
+        console.error('Failed to load applications:', err);
+        console.error('Error response:', err?.response);
+        console.error('Error status:', err?.response?.status);
+        console.error('Error data:', err?.response?.data);
+        setError(err?.response?.data?.message || err?.message || 'Failed to load applications');
+        setApplications([]);
+      })
+      .finally(() => setLoading(false));
+  };
+  
+  useEffect(load, [status, role]);
+  
   async function review(action) {
-    action === 'approve' ? await roleApplicationsApi.approve(selected.id, note) : await roleApplicationsApi.reject(selected.id, note);
-    setSelected(null);
-    setNote('');
-    load();
+    const actionText = action === 'approve' ? 'approve' : 'reject';
+    if (!window.confirm(`Are you sure you want to ${actionText} this application?`)) return;
+    setActionLoading(true);
+    try {
+      action === 'approve' 
+        ? await roleApplicationsApi.approve(selected.id, note)
+        : await roleApplicationsApi.reject(selected.id, note);
+      setSelected(null);
+      setNote('');
+      load();
+    } catch (err) {
+      alert(err?.response?.data?.message || `Failed to ${actionText} application`);
+    } finally {
+      setActionLoading(false);
+    }
   }
-  return <div className="page"><section className="section-head"><div><p className="eyebrow">Admin</p><h1>Applications</h1></div><select className="input compact-input" value={status} onChange={(event) => setStatus(event.target.value)}>{Object.values(ApplicationStatus).map((item) => <option key={item} value={item}>{item}</option>)}</select></section><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{app.userName} wants {titleCase(app.requestedRole)}</h3><p>{app.message}</p><Button onClick={() => setSelected(app)}>Review</Button></article>)}{!applications.length ? <EmptyState title="No applications" /> : null}</div><Modal open={Boolean(selected)} title="Review application" onClose={() => setSelected(null)}><Input label="Review note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} /><div className="hero-actions"><Button onClick={() => review('approve')}>Approve</Button><Button variant="ghost" onClick={() => review('reject')}>Reject</Button></div></Modal></div>;
+  
+  return <div className="page"><section className="section-head"><div><p className="eyebrow">Admin</p><h1>Applications</h1></div><select className="input compact-input" value={status} onChange={(event) => setStatus(event.target.value)}>{Object.values(ApplicationStatus).map((item) => <option key={item} value={item}>{item}</option>)}</select></section>{loading ? <div className="loading-state">Loading applications...</div> : error ? <div className="error-state">{error}</div> : <><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{app.userName} wants {titleCase(app.requestedRole)}</h3><p>{app.message}</p><Button onClick={() => setSelected(app)}>Review</Button></article>)}{!applications.length ? <EmptyState title="No applications" /> : null}</div><Modal open={Boolean(selected)} title="Review application" onClose={() => setSelected(null)}><Input label="Review note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} /><div className="hero-actions"><Button onClick={() => review('approve')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Approve'}</Button><Button variant="ghost" onClick={() => review('reject')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button></div></Modal></>}</div>;
 }
 
 export function InfluencerDashboardPage() {

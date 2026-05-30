@@ -69,7 +69,13 @@ export default function Navbar() {
           <NavLink to="/reels/upload">Upload Reel</NavLink>
         </>
       ) : null}
-      {role === Role.ADMIN ? <NavLink to="/admin">Admin</NavLink> : null}
+      {role === Role.ADMIN ? (
+        <>
+          <NavLink to="/admin">Dashboard</NavLink>
+          <NavLink to="/admin/users">Users</NavLink>
+          <NavLink to="/admin/applications">Applications</NavLink>
+        </>
+      ) : null}
     </>
   );
 
