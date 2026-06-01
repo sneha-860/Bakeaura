@@ -37,7 +37,7 @@ cloudinary:
   api-key: ${CLOUDINARY_API_KEY:YOUR_API_KEY_HERE}
   api-secret: ${CLOUDINARY_API_SECRET:YOUR_API_SECRET_HERE}
 
-spring:
+
   task:
     execution:
       pool:
@@ -51,7 +51,7 @@ spring:
 
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost}
   delivery:
     max-radius-km: ${DELIVERY_MAX_RADIUS_KM:10}
     base-time-minutes: 10 # Fixed prep time added to travel time

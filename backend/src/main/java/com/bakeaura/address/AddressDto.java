@@ -1,3 +1,6 @@
+//DTO (Data Transfer Object) is a simple object used to transfer only the required data between layers of an application, especially between backend and frontend, without exposing the complete entity structure.
+
+//DTO     -> Data sent to frontend
 package com.bakeaura.address;
 
 import lombok.AllArgsConstructor;

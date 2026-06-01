@@ -37,3 +37,15 @@ public class ApiResponse<T> {
 // Every API now returns:
 // { "success": true, "message": "Product created", "data": { ... } }
 // { "success": false, "message": "Not authorized", "data": null }
+
+//What is ApiResponse?
+//
+//ApiResponse is a generic wrapper class used to maintain a consistent response structure across all APIs. It usually contains fields like success, message, data, errorCode, and timestamp.
+//
+//What is ResponseEntity?
+//
+//ResponseEntity is a Spring class used to control the entire HTTP response, including status code, headers, and response body
+
+
+//ResponseEntity = Complete HTTP Response
+//ApiResponse<Product> = Body of the Response

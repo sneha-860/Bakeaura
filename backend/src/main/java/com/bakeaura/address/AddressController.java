@@ -1,3 +1,6 @@
+//AddressController exposes REST APIs for managing user addresses. It receives HTTP requests, extracts request data and authenticated user information, delegates business logic to AddressService, and returns standardized API responses using ApiResponse and ResponseEntity. It does not contain business logic itself.
+
+
 package com.bakeaura.address;
 
 import com.bakeaura.common.ApiResponse;

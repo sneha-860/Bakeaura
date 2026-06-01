@@ -1,3 +1,5 @@
+//Create an addresses table where each address belongs to one user, stores location details (address, latitude, longitude), supports a default address, and automatically records creation and update times.
+
 package com.bakeaura.address;
 
 import com.bakeaura.user.User;

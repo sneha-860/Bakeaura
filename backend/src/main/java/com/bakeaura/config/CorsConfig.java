@@ -16,7 +16,7 @@ import java.util.List;
 public class CorsConfig implements WebMvcConfigurer {
     private final List<String> allowedOrigins;
 
-    public CorsConfig(@Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
+    public CorsConfig(@Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173,http://localhost}") String allowedOrigins) {
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())

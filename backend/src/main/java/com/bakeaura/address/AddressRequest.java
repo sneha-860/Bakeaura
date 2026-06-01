@@ -1,3 +1,6 @@
+
+//All this data comes from the frontend to the backend.
+
 package com.bakeaura.address;
 
 import jakarta.validation.constraints.DecimalMax;
