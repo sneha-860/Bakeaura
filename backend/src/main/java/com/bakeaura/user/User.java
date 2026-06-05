@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Table(name = "users")
 @Data              // Lombok: auto-generates getters, setters, toString
 @NoArgsConstructor // Lombok: generates empty constructor
-@AllArgsConstructor
+
 public class User {
 
     @Id
@@ -43,6 +43,33 @@ public class User {
     private Double latitude;
 
     private Double longitude;
+
+    @Column(nullable=true )
+    private String phone;
+
+    @Column (name = "profile_image_url")
+    private String profileImageUrl;
+
+    @Column (name= "is_email_verified")
+    private Boolean isEmailVerified = false;
+
+    @Column(nullable = true)
+    private String bio;
+
+    @Column(name = "email_verification_token")
+    private String emailVerificationToken;
+
+    @Column(name = "email_verification_token_expiry")
+    private LocalDateTime emailVerificationTokenExpiry;
+
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
+    @Column(name = "pending_email_token")
+    private String pendingEmailToken;
+
+    @Column(name = "pending_email_token_expiry")
+    private LocalDateTime pendingEmailTokenExpiry;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

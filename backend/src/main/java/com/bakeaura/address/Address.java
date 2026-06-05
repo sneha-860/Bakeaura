@@ -19,6 +19,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+//@Entity
+//Maps a java class to a database table.
 @Entity
 @Table(name = "addresses")
 @Data
@@ -44,7 +46,7 @@ public class Address {
     @Column(nullable = false)
     private Double longitude;
 
-    private Boolean defaultAddress = false;
+    private Boolean defaultAddress =  false;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

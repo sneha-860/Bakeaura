@@ -1,3 +1,5 @@
+//single responsibility — JWT operations only
+
 package com.bakeaura.auth;
 
 import com.bakeaura.enums.Role;
@@ -25,12 +27,12 @@ public class JwtUtil {
 
 
     // Generate access token
-    public String generateAccessToken(String email, Role role) {
+    public String generateAccessToken(Long userId, Role role) {
 
         return Jwts.builder()
 
                 // token owner
-                .subject(email)
+                .subject(String.valueOf(userId))
 
                 // custom role claim
                 .claim("role", role.name())
@@ -58,12 +60,12 @@ public class JwtUtil {
 
 
     // Generate refresh token
-    public String generateRefreshToken(String email) {
+    public String generateRefreshToken(Long userId) {
 
         return Jwts.builder()
 
                 // token owner
-                .subject(email)
+                .subject(String.valueOf(userId))
 
                 // token purpose
                 .claim("tokenType", "refresh")
@@ -87,10 +89,10 @@ public class JwtUtil {
     }
 
 
-    // Extract email from token
-    public String extractEmail(String token) {
+    // Extract userID from token
+    public Long extractUserId(String token) {
 
-        return Jwts.parser()
+        String subject =  Jwts.parser()
 
                 // verify token signature
                 .verifyWith(getSigningKey())
@@ -106,6 +108,8 @@ public class JwtUtil {
 
                 // get subject/email
                 .getSubject();
+
+        return Long.parseLong(subject);
     }
 
 

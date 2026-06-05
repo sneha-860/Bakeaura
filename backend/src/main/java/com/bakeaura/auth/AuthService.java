@@ -9,7 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor    //Any field marked final gets included in the constructor automatically.
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -32,14 +32,14 @@ public class AuthService {
         User savedUser = userRepository.save(user);
 
         String accessToken = jwtUtil.generateAccessToken(
-                savedUser.getEmail(),
+                savedUser.getId(),
                 savedUser.getRole()
         );
 
         String refreshToken = jwtUtil.generateRefreshToken(
-                savedUser.getEmail()
+                savedUser.getId()
         );
-        refreshTokenStore.store(savedUser.getEmail(), refreshToken);
+        refreshTokenStore.store(savedUser.getId(), refreshToken);
 
         return new AuthResponse(
                 accessToken,
@@ -63,14 +63,14 @@ public class AuthService {
         }
 
         String accessToken = jwtUtil.generateAccessToken(
-                user.getEmail(),
+                user.getId(),
                 user.getRole()
         );
 
         String refreshToken = jwtUtil.generateRefreshToken(
-                user.getEmail()
+                user.getId()
         );
-        refreshTokenStore.store(user.getEmail(), refreshToken);
+        refreshTokenStore.store(user.getId(), refreshToken);
 
         return new AuthResponse(
                 accessToken,
@@ -88,11 +88,11 @@ public class AuthService {
             throw new BadRequestException("Invalid refresh token");
         }
 
-        String email = jwtUtil.extractEmail(refreshToken);
-        User user = userRepository.findByEmail(email)
+        Long userId = jwtUtil.extractUserId(refreshToken);
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
 
-        if (!refreshTokenStore.matches(user.getEmail(), refreshToken)) {
+        if (!refreshTokenStore.matches(user.getId(), refreshToken)) {
             throw new BadRequestException("Invalid refresh token");
         }
 
@@ -101,14 +101,14 @@ public class AuthService {
         }
 
         String accessToken = jwtUtil.generateAccessToken(
-                user.getEmail(),
+                user.getId(),
                 user.getRole()
         );
 
         String newRefreshToken = jwtUtil.generateRefreshToken(
-                user.getEmail()
+                user.getId()
         );
-        refreshTokenStore.store(user.getEmail(), newRefreshToken);
+        refreshTokenStore.store(user.getId(), newRefreshToken);
 
         return new AuthResponse(
                 accessToken,
@@ -126,7 +126,7 @@ public class AuthService {
             throw new BadRequestException("Invalid refresh token");
         }
 
-        String email = jwtUtil.extractEmail(refreshToken);
-        refreshTokenStore.revoke(email);
+       Long userId = jwtUtil.extractUserId(refreshToken);
+        refreshTokenStore.revoke(userId);
     }
 }

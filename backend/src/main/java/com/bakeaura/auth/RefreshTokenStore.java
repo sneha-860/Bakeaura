@@ -18,24 +18,24 @@ public class RefreshTokenStore {
     @Value("${jwt.refresh-expiration}")
     private long refreshTokenExpirationMs;
 
-    public void store(String email, String refreshToken) {
+    public void store(Long userId, String refreshToken) {
         redisTemplate.opsForValue().set(
-                key(email),
+                key(userId),
                 refreshToken,
                 Duration.ofMillis(refreshTokenExpirationMs)
         );
     }
 
-    public boolean matches(String email, String refreshToken) {
-        Object storedToken = redisTemplate.opsForValue().get(key(email));
+    public boolean matches(Long userId, String refreshToken) {
+        Object storedToken = redisTemplate.opsForValue().get(key(userId));
         return refreshToken.equals(storedToken);
     }
 
-    public void revoke(String email) {
-        redisTemplate.delete(key(email));
+    public void revoke(Long userId) {
+        redisTemplate.delete(key(userId));
     }
 
-    private String key(String email) {
-        return REFRESH_TOKEN_PREFIX + email;
+    private String key(Long userId) {
+        return REFRESH_TOKEN_PREFIX + userId;
     }
 }

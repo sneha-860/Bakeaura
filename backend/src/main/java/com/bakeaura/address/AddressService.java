@@ -15,7 +15,6 @@ import java.util.List;
 public class AddressService {
     private final AddressRepository addressRepository;
     private final UserRepository userRepository;
-
     public List<AddressDto> getAddresses(String email) {
         User user = getUser(email);
         return addressRepository.findByUserOrderByDefaultAddressDescCreatedAtDesc(user).stream()
