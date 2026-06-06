@@ -1,12 +1,11 @@
-
 spring:
   application:
     name: bakeaura-backend
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/bakeaura_db}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:hello}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -26,18 +25,21 @@ spring:
   cache:
     type: redis
     redis:
-      time-to-live: 600000 # 10 minutes in milliseconds
+      time-to-live: 600000
 
-razorpay:
-  key-id: ${RAZORPAY_KEY_ID:rzp_test_your_key}
-  key-secret: ${RAZORPAY_KEY_SECRET:your_secret}
-  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:your_webhook_secret}
-
-cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME:YOUR_CLOUD_NAME_HERE}
-  api-key: ${CLOUDINARY_API_KEY:YOUR_API_KEY_HERE}
-  api-secret: ${CLOUDINARY_API_SECRET:YOUR_API_SECRET_HERE}
-
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+        debug: false
 
   task:
     execution:
@@ -45,17 +47,29 @@ cloudinary:
         core-size: 4
         max-size: 8
         queue-capacity: 100
+
   servlet:
     multipart:
       max-file-size: 200MB
       max-request-size: 200MB
 
+razorpay:
+  key-id: ${RAZORPAY_KEY_ID}
+  key-secret: ${RAZORPAY_KEY_SECRET}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET}
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
+
 app:
+  base-url: http://localhost:8080
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   delivery:
     max-radius-km: ${DELIVERY_MAX_RADIUS_KM:10}
-    base-time-minutes: 10 # Fixed prep time added to travel time
+    base-time-minutes: 10
     average-speed-kmph: ${DELIVERY_AVERAGE_SPEED_KMPH:30}
     road-distance-factor: ${DELIVERY_ROAD_DISTANCE_FACTOR:1.3}
 
@@ -63,6 +77,6 @@ server:
   port: 8080
 
 jwt:
-  secret: ${JWT_SECRET:bakeaura_dev_secret_change_me}
+  secret: ${JWT_SECRET}
   access-expiration: 900000
   refresh-expiration: 604800000

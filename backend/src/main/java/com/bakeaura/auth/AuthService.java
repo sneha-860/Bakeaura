@@ -1,17 +1,24 @@
 package com.bakeaura.auth;
 
+import com.bakeaura.notification.EmailService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor    //Any field marked final gets included in the constructor automatically.
 public class AuthService {
 
+    private final EmailService emailService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -28,8 +35,15 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.CUSTOMER);
         user.setIsActive(true);
+        user.setIsEmailVerified(false);
+
+        String verificationToken = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(verificationToken);
+        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
 
         User savedUser = userRepository.save(user);
+
+        emailService.sendVerificationEmail(savedUser.getEmail(), verificationToken);
 
         String accessToken = jwtUtil.generateAccessToken(
                 savedUser.getId(),
@@ -128,5 +142,19 @@ public class AuthService {
 
        Long userId = jwtUtil.extractUserId(refreshToken);
         refreshTokenStore.revoke(userId);
+    }
+
+    @Transactional
+    public void verifyEmail(String token ){
+        User user = userRepository.findByEmailVerificationToken(token).orElseThrow(() -> new BadRequestException("Invalid verification token "));
+
+        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())){
+            throw new BadRequestException("Verification token expired");
+        }
+
+        user.setIsEmailVerified(true);
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationTokenExpiry(null);
+        userRepository.save(user);
     }
 }

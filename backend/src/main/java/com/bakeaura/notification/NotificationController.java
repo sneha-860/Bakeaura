@@ -21,24 +21,24 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotifications(Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok("Notifications fetched", notificationService.getNotifications(authentication.getName())));
+        return ResponseEntity.ok(ApiResponse.ok("Notifications fetched", notificationService.getNotifications(Long.parseLong(authentication.getName()))));
     }
 
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Map<String, Long>>> unreadCount(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Unread count fetched", Map.of(
-                "unreadCount", notificationService.getUnreadCount(authentication.getName())
+                "unreadCount", notificationService.getUnreadCount(Long.parseLong(authentication.getName()))
         )));
     }
 
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<NotificationDto>> markRead(Authentication authentication, @PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok("Notification marked read", notificationService.markRead(authentication.getName(), id)));
+        return ResponseEntity.ok(ApiResponse.ok("Notification marked read", notificationService.markRead(Long.parseLong(authentication.getName()),id)));
     }
 
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllRead(Authentication authentication) {
-        notificationService.markAllRead(authentication.getName());
+        notificationService.markAllRead(Long.parseLong(authentication.getName()));
         return ResponseEntity.ok(ApiResponse.ok("Notifications marked read", null));
     }
 }

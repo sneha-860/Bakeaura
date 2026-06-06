@@ -15,4 +15,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRoleAndIsActiveTrue(com.bakeaura.enums.Role role);
 
     List<User> findByRole(com.bakeaura.enums.Role role);
+
+    Optional<User> findByEmailVerificationToken(String token);
 }

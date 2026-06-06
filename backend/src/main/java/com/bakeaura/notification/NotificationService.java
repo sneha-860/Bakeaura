@@ -18,28 +18,28 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public List<NotificationDto> getNotifications(String email) {
-        User user = getUser(email);
+    public List<NotificationDto> getNotifications(Long userId) {
+        User user = getUser(userId);
         return notificationRepository.findByUserOrderByCreatedAtDesc(user).stream()
                 .map(this::toDto)
                 .toList();
     }
 
-    public long getUnreadCount(String email) {
-        return notificationRepository.countByUserAndReadFalse(getUser(email));
+    public long getUnreadCount(Long userId) {
+        return notificationRepository.countByUserAndReadFalse(getUser(userId));
     }
 
     @Transactional
-    public NotificationDto markRead(String email, Long id) {
-        User user = getUser(email);
+    public NotificationDto markRead(Long userId, Long id) {
+        User user = getUser(userId);
         Notification notification = getOwnedNotification(id, user);
         notification.setRead(true);
         return toDto(notificationRepository.save(notification));
     }
 
     @Transactional
-    public void markAllRead(String email) {
-        User user = getUser(email);
+    public void markAllRead(Long userId) {
+        User user = getUser(userId);
         notificationRepository.findByUserOrderByCreatedAtDesc(user).forEach(notification -> {
             notification.setRead(true);
             notificationRepository.save(notification);
@@ -47,8 +47,8 @@ public class NotificationService {
     }
 
     @Transactional
-    public NotificationDto notifyUser(String email, String type, String message, Long relatedId) {
-        User user = getUser(email);
+    public NotificationDto notifyUser(Long userId, String type, String message, Long relatedId) {
+        User user = getUser(userId);
         Notification notification = new Notification();
         notification.setUser(user);
         notification.setType(type);
@@ -68,8 +68,8 @@ public class NotificationService {
         return notification;
     }
 
-    private User getUser(String email) {
-        return userRepository.findByEmail(email)
+    private User getUser(Long  userId) {
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
