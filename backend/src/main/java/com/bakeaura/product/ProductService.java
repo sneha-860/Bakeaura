@@ -65,6 +65,11 @@ public class ProductService {
         return productRepository.findById(id).map(this::toDto);
     }
 
+    public Product getProductEntityById(Long id) {
+        return productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+    }
+
     @Cacheable(value = "products", key = "'search:' + #keyword")
     public List<ProductDto> searchProducts(String keyword) {
         return productRepository.findByNameContainingIgnoreCase(keyword).stream()

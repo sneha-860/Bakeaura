@@ -7,13 +7,14 @@ import com.bakeaura.cart.CartItemDto;
 import com.bakeaura.cart.CartService;
 import com.bakeaura.notification.NotificationService;
 import com.bakeaura.product.Product;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.enums.OrderStatus;
+import com.bakeaura.enums.OrderType;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.payment.PaymentService;
-import com.bakeaura.product.ProductRepository;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,7 +32,7 @@ import java.util.stream.Collectors;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
     private final UserRepository userRepository;
     private final MapService mapService;
     private final PaymentService paymentService;
@@ -64,6 +66,21 @@ public class OrderService {
             throw new BadRequestException("Delivery address is outside the seller's delivery radius");
         }
 
+        if (request.getOrderType() == OrderType.SCHEDULED) {
+            if (request.getScheduledDeliveryDate() == null) {
+                throw new BadRequestException("Scheduled delivery date is required for scheduled orders");
+            }
+            for (CreateOrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
+                Product product = productService.getProductEntityById(itemReq.getProductId());
+                if (product.getMinAdvanceDays() != null) {
+                    LocalDate earliestDate = LocalDate.now().plusDays(product.getMinAdvanceDays());
+                    if (request.getScheduledDeliveryDate().isBefore(earliestDate)) {
+                        throw new BadRequestException("Product " + product.getName() + " requires at least " + product.getMinAdvanceDays() + " days advance notice");
+                    }
+                }
+            }
+        }
+
         // ---- Build order ----
         Order order = Order.builder()
                 .customer(customer)
@@ -72,14 +89,14 @@ public class OrderService {
                 .deliveryAddress(request.getDeliveryAddress())
                 .deliveryLatitude(request.getDeliveryLatitude())
                 .deliveryLongitude(request.getDeliveryLongitude())
+                .orderType(request.getOrderType())
+                .scheduledDeliveryDate(request.getScheduledDeliveryDate())
                 .build();
 
         BigDecimal total = BigDecimal.ZERO;
 
         for (CreateOrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
-            Product product = productRepository.findById(itemReq.getProductId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Product " + itemReq.getProductId() + " not found"));
-
+            Product product = productService.getProductEntityById(itemReq.getProductId());
             // Ensure product belongs to this seller
             if (!product.getSeller().getId().equals(seller.getId())) {
                 throw new BadRequestException("Product " + product.getId() + " does not belong to the seller");
@@ -126,6 +143,8 @@ public class OrderService {
         orderRequest.setDeliveryAddress(request.getDeliveryAddress());
         orderRequest.setDeliveryLatitude(request.getDeliveryLatitude());
         orderRequest.setDeliveryLongitude(request.getDeliveryLongitude());
+        orderRequest.setOrderType(request.getOrderType());
+        orderRequest.setScheduledDeliveryDate(request.getScheduledDeliveryDate());
         orderRequest.setItems(cart.getItems().stream()
                 .map(this::toOrderItemRequest)
                 .toList());

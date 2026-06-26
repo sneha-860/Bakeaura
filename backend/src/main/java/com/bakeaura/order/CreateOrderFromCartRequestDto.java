@@ -1,9 +1,12 @@
 package com.bakeaura.order;
 
+import com.bakeaura.enums.OrderType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import java.time.LocalDate;
 
 @Data
 public class CreateOrderFromCartRequestDto {
@@ -22,4 +25,9 @@ public class CreateOrderFromCartRequestDto {
     @DecimalMin("-180.0")
     @DecimalMax("180.0")
     private Double deliveryLongitude;
+
+    private LocalDate scheduledDeliveryDate;
+
+    @NotNull
+    private OrderType orderType;
 }

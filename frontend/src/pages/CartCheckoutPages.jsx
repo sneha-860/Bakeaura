@@ -18,10 +18,10 @@ import ProductImage from '../components/ProductImage';
 import { currency } from '../utils/format';
 
 const addressSchema = z.object({
-  label: z.string().min(2),
-  addressLine: z.string().min(6),
-  latitude: z.coerce.number(),
-  longitude: z.coerce.number(),
+  label: z.string().min(1).max(100),
+  addressLine: z.string().min(1).max(1000),
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
   defaultAddress: z.boolean().optional()
 });
 

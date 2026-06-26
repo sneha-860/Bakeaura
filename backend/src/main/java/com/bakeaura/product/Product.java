@@ -11,7 +11,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "products")
+@Table(name = "products", indexes = {
+        @Index(name = "idx_product_seller_id", columnList = "seller_id"),
+        @Index(name = "idx_product_category_id", columnList = "category_id")
+})
 @Data
 @NoArgsConstructor
 public class Product {
@@ -19,6 +22,10 @@ public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    private Long version;
+
 
     @Column(nullable = false)
     private String name;
@@ -49,4 +56,10 @@ public class Product {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @Column (name = "is_pre_order_only")
+    private Boolean isPreOrderOnly = false;
+
+    @Column (name = "min_advance_days")
+    private Integer minAdvanceDays;
 }

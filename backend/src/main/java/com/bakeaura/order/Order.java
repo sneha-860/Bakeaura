@@ -1,11 +1,13 @@
 package com.bakeaura.order;
 
 import com.bakeaura.enums.OrderStatus;
+import com.bakeaura.enums.OrderType;
 import jakarta.persistence.*;
 import com.bakeaura.user.User;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import java.time.LocalDate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -13,7 +15,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")     // "order" is a reserved SQL keyword — always use "orders"
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_order_customer_id", columnList = "customer_id"),
+        @Index(name = "idx_order_seller_id", columnList = "seller_id")
+})    // "order" is a reserved SQL keyword — always use "orders"
 @Getter @Setter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -33,6 +38,13 @@ public class Order {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false )
+    private OrderType orderType;
+
+    @Column (nullable = true)
+    private LocalDate scheduledDeliveryDate;
 
     // Line items — cascade ALL means saving/deleting the order cascades to items
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)

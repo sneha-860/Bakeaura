@@ -124,6 +124,9 @@ export default function Navbar() {
                     <UserRound size={16} />
                     <span>Profile</span>
                   </Link>
+                  <Link to="/addresses" onClick={() => setProfileDropdownOpen(false)}>
+                    <span>Addresses</span>
+                  </Link>
                   {role !== Role.SELLER && role !== Role.ADMIN && !myApplications.some((a) => a.status === 'PENDING') && (
                     <button onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(false); setTimeout(() => setRoleModalOpen(true), 100); }}>
                       <span>Apply as Seller/Creator</span>

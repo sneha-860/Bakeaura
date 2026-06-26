@@ -1,5 +1,6 @@
 package com.bakeaura.order;
 
+import com.bakeaura.enums.OrderType;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMax;
@@ -8,6 +9,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.Valid;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -31,6 +33,11 @@ public class CreateOrderRequestDto {
     @DecimalMin(value = "-180.0", message = "must be greater than or equal to -180")
     @DecimalMax(value = "180.0", message = "must be less than or equal to 180")
     private Double deliveryLongitude;
+
+    private LocalDate scheduledDeliveryDate;
+
+    @NotNull
+    private OrderType orderType;
 
     @Data
     public static class OrderItemRequest {

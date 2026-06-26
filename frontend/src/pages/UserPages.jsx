@@ -21,7 +21,13 @@ import { titleCase } from '../utils/format';
 
 const profileSchema = z.object({ name: z.string().min(2), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
-const addressSchema = z.object({ label: z.string().min(2), addressLine: z.string().min(5), latitude: z.coerce.number(), longitude: z.coerce.number(), defaultAddress: z.boolean().optional() });
+const addressSchema = z.object({ 
+  label: z.string().min(1).max(100), 
+  addressLine: z.string().min(1).max(1000), 
+  latitude: z.coerce.number().min(-90).max(90), 
+  longitude: z.coerce.number().min(-180).max(180), 
+  defaultAddress: z.boolean().optional() 
+});
 const applicationSchema = z.object({ requestedRole: z.enum([Role.SELLER, Role.INFLUENCER]), message: z.string().min(10) });
 
 export function ProfilePage() {
