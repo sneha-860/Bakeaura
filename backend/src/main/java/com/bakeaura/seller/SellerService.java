@@ -1,20 +1,26 @@
 package com.bakeaura.seller;
 
 import com.bakeaura.enums.Role;
+import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.map.MapService;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class SellerService {
+
     private final UserRepository userRepository;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
+    private final SellerProfileRepository sellerProfileRepository;
+    private final MapService mapService;
 
     public List<SellerProfileDto> getSellers() {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
@@ -32,34 +38,93 @@ public class SellerService {
     public List<SellerProfileDto> getNearbySellers(double latitude, double longitude, double radius) {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
                 .filter(seller -> seller.getLatitude() != null && seller.getLongitude() != null)
-                .filter(seller -> calculateDistance(latitude, longitude, seller.getLatitude(), seller.getLongitude()) <= radius)
+                .filter(seller -> mapService.calculateDistance(
+                        latitude, longitude,
+                        seller.getLatitude(), seller.getLongitude()) <= radius)
                 .map(this::toDto)
                 .toList();
     }
 
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        // Haversine formula
-        double earthRadius = 6371.0; // km
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                   Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return earthRadius * c;
+    @Transactional
+    public SellerProfileDto updateProfile(Long userId, UpdateSellerProfileDto request) {
+        User seller = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (seller.getRole() != Role.SELLER) {
+            throw new BadRequestException("User is not a seller");
+        }
+
+        SellerProfile profile = sellerProfileRepository.findByUserId(userId)
+                .orElseGet(() -> SellerProfile.builder().user(seller).build());
+
+        if (request.getShopName() != null) profile.setShopName(request.getShopName());
+        if (request.getShopBio() != null) profile.setShopBio(request.getShopBio());
+        if (request.getDeliveryRadiusKm() != null) profile.setDeliveryRadiusKm(request.getDeliveryRadiusKm());
+        if (request.getBannerImageUrl() != null) profile.setBannerImageUrl(request.getBannerImageUrl());
+
+        sellerProfileRepository.save(profile);
+        return toDto(seller);
+    }
+
+    @Transactional
+    public SellerProfileDto toggleOpen(Long userId) {
+        User seller = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (seller.getRole() != Role.SELLER) {
+            throw new BadRequestException("User is not a seller");
+        }
+
+        SellerProfile profile = sellerProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Seller profile not found. Please complete your profile first."));
+
+        profile.setIsOpen(!profile.getIsOpen());
+        sellerProfileRepository.save(profile);
+        return toDto(seller);
+    }
+
+    @Transactional
+    public void createProfileForNewSeller(User user) {
+        if (!sellerProfileRepository.existsByUserId(user.getId())) {
+            SellerProfile profile = SellerProfile.builder()
+                    .user(user)
+                    .isOpen(false)
+                    .totalRatings(0)
+                    .averageRating(0.0)
+                    .build();
+            sellerProfileRepository.save(profile);
+        }
     }
 
     private SellerProfileDto toDto(User seller) {
-        long productCount = productRepository.findBySellerId(seller.getId()).stream()
-                .filter(product -> Boolean.TRUE.equals(product.getIsAvailable()))
-                .count();
-        return new SellerProfileDto(
-                seller.getId(),
-                seller.getName(),
-                seller.getEmail(),
-                seller.getLatitude(),
-                seller.getLongitude(),
-                productCount
-        );
+        SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
+
+        long productCount = productService.getProductsBySeller(seller.getId()).size();
+
+        int completeness = 0;
+        if (profile != null) {
+            if (profile.getShopName() != null && !profile.getShopName().isBlank()) completeness += 20;
+            if (profile.getShopBio() != null && !profile.getShopBio().isBlank()) completeness += 20;
+            if (profile.getBannerImageUrl() != null && !profile.getBannerImageUrl().isBlank()) completeness += 20;
+            if (profile.getDeliveryRadiusKm() != null) completeness += 20;
+        }
+        if (productCount > 0) completeness += 20;
+
+        return SellerProfileDto.builder()
+                .id(seller.getId())
+                .name(seller.getName())
+                .email(seller.getEmail())
+                .latitude(seller.getLatitude())
+                .longitude(seller.getLongitude())
+                .shopName(profile != null ? profile.getShopName() : null)
+                .shopBio(profile != null ? profile.getShopBio() : null)
+                .deliveryRadiusKm(profile != null ? profile.getDeliveryRadiusKm() : null)
+                .isOpen(profile != null ? profile.getIsOpen() : false)
+                .bannerImageUrl(profile != null ? profile.getBannerImageUrl() : null)
+                .totalRatings(profile != null ? profile.getTotalRatings() : 0)
+                .averageRating(profile != null ? profile.getAverageRating() : 0.0)
+                .productCount(productCount)
+                .profileCompleteness(completeness)
+                .build();
     }
 }

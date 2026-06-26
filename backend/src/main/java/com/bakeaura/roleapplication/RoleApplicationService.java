@@ -4,6 +4,7 @@ import com.bakeaura.enums.ApplicationStatus;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.seller.SellerService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.util.List;
 public class RoleApplicationService {
 
     private final RoleApplicationRepository roleApplicationRepository;
+    private final SellerService sellerService;
     private final UserRepository userRepository;
 
     @Transactional
@@ -84,6 +86,11 @@ public class RoleApplicationService {
         application.setReviewedAt(LocalDateTime.now());
 
         userRepository.save(user);
+
+        if (application.getRequestedRole() == Role.SELLER) {
+            sellerService.createProfileForNewSeller(user);
+        }
+
         return toResponse(roleApplicationRepository.save(application));
     }
 
