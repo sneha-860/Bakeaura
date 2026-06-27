@@ -8,6 +8,7 @@ import com.bakeaura.cart.CartService;
 import com.bakeaura.notification.NotificationService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
+import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.OrderType;
@@ -36,6 +37,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final MapService mapService;
     private final PaymentService paymentService;
+    private final ReferralOrderService referralOrderService;
     private final OrderTrackingService orderTrackingService;
     private final CartService cartService;
     private final NotificationService notificationService;
@@ -121,6 +123,10 @@ public class OrderService {
         saved.setRazorpayOrderId(razorpayOrderId);
         paymentService.createPendingPayment(saved, razorpayOrderId);
 
+        if (request.getReferralCode() != null && !request.getReferralCode().isBlank()) {
+            referralOrderService.processReferral(saved.getId(), request.getReferralCode(), total);
+        }
+
         notificationService.notifyUser(
                 seller.getEmail(),
                 "ORDER_CREATED",
@@ -145,6 +151,7 @@ public class OrderService {
         orderRequest.setDeliveryLongitude(request.getDeliveryLongitude());
         orderRequest.setOrderType(request.getOrderType());
         orderRequest.setScheduledDeliveryDate(request.getScheduledDeliveryDate());
+        orderRequest.setReferralCode(request.getReferralCode());
         orderRequest.setItems(cart.getItems().stream()
                 .map(this::toOrderItemRequest)
                 .toList());

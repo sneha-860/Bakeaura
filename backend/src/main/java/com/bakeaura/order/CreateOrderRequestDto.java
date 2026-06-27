@@ -39,6 +39,8 @@ public class CreateOrderRequestDto {
     @NotNull
     private OrderType orderType;
 
+    private String referralCode;
+
     @Data
     public static class OrderItemRequest {
         @NotNull

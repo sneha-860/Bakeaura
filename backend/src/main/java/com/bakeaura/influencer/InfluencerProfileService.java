@@ -46,6 +46,14 @@ public class InfluencerProfileService {
         return toResponse(influencerProfileRepository.save(profile));
     }
 
+    @Transactional
+    public void incrementTotalReferrals(Long userId) {
+        InfluencerProfile profile = influencerProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Influencer profile not found"));
+        profile.setTotalReferrals(profile.getTotalReferrals() + 1);
+        influencerProfileRepository.save(profile);
+    }
+
     private InfluencerProfileResponse toResponse(InfluencerProfile profile) {
         User user = profile.getUser();
         return new InfluencerProfileResponse(

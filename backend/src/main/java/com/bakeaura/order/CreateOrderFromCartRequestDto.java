@@ -30,4 +30,6 @@ public class CreateOrderFromCartRequestDto {
 
     @NotNull
     private OrderType orderType;
+
+    private String referralCode;
 }

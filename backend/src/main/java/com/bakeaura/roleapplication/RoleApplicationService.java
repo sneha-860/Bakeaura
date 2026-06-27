@@ -5,6 +5,7 @@ import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.influencer.InfluencerProfileService;
+import com.bakeaura.referral.ReferralCodeService;
 import com.bakeaura.seller.SellerService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
@@ -22,6 +23,7 @@ public class RoleApplicationService {
     private final RoleApplicationRepository roleApplicationRepository;
     private final SellerService sellerService;
     private final InfluencerProfileService influencerProfileService;
+    private final ReferralCodeService referralCodeService;
     private final UserRepository userRepository;
 
 
@@ -94,6 +96,7 @@ public class RoleApplicationService {
             sellerService.createProfileForNewSeller(user);
         } else if (application.getRequestedRole() == Role.INFLUENCER) {
             influencerProfileService.createProfileForNewInfluencer(user);
+            referralCodeService.generateAndSaveReferralCode(user);
         }
 
         return toResponse(roleApplicationRepository.save(application));
