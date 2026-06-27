@@ -1,6 +1,7 @@
 package com.bakeaura.referral;
 
 import com.bakeaura.influencer.InfluencerProfileService;
+import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ public class ReferralOrderService {
     private final ReferralOrderRepository referralOrderRepository;
     private final ReferralCodeRepository referralCodeRepository;
     private final InfluencerProfileService influencerProfileService;
+    private final WalletService walletService;
 
     @Transactional
     public void processReferral(Long orderId, String code, BigDecimal orderTotal) {
@@ -44,9 +46,14 @@ public class ReferralOrderService {
 
         referralOrderRepository.save(referralOrder);
 
-        influencerProfileService.incrementTotalReferrals(referralCode.getInfluencerId());
+        Long influencerId = referralCode.getInfluencer().getId();
 
-        // TODO: Step 15 — call WalletService to credit commission to influencer
-        // walletService.credit(referralCode.getInfluencerId(), commission, "Referral commission for order #" + orderId);
+        influencerProfileService.incrementTotalReferrals(influencerId);
+
+        walletService.credit(
+                influencerId,
+                commission,
+                "Referral commission for order #" + orderId
+        );
     }
 }
