@@ -4,6 +4,10 @@ import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -18,11 +22,12 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public List<NotificationDto> getNotifications(Long userId) {
+    public Page<NotificationDto> getNotifications(Long userId, int page, int size) {
         User user = getUser(userId);
-        return notificationRepository.findByUserOrderByCreatedAtDesc(user).stream()
-                .map(this::toDto)
-                .toList();
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        return notificationRepository
+                .findByUserOrderByCreatedAtDesc(user, pageable)
+                .map(this::toDto);
     }
 
     public long getUnreadCount(Long userId) {
@@ -68,7 +73,7 @@ public class NotificationService {
         return notification;
     }
 
-    private User getUser(Long  userId) {
+    private User getUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }

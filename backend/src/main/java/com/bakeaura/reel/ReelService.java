@@ -1,15 +1,13 @@
 package com.bakeaura.reel;
 
-
-
 import com.bakeaura.cloudinary.CloudinaryService;
-import com.bakeaura.reel.ReelResponseDTO;
-import com.bakeaura.reel.Reel;
 import com.bakeaura.user.User;
-import com.bakeaura.reel.ReelRepository;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -27,12 +25,8 @@ public class ReelService {
     private final ReelRepository reelRepository;
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
-    private final SimpMessagingTemplate messagingTemplate; // WebSocket — you already have this!
+    private final SimpMessagingTemplate messagingTemplate;
 
-    /**
-     * Step 1: Save a "PROCESSING" reel immediately so we can return its ID to the frontend.
-     * The actual Cloudinary upload happens asynchronously.
-     */
     public ReelResponseDTO initiateUpload(String caption, String sellerEmail) {
         User seller = userRepository.findByEmail(sellerEmail)
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
@@ -47,14 +41,6 @@ public class ReelService {
         return toResponseDTO(saved);
     }
 
-    /**
-     * Step 2: This runs in a BACKGROUND THREAD because of @Async.
-     * Spring Boot will not wait for this to finish before returning the HTTP response.
-     *
-     * BEGINNER NOTE: @Async only works when the method is called from OUTSIDE
-     * this class (i.e., from a Controller or another Service). It does NOT work
-     * if you call it from within the same class — that's a very common mistake!
-     */
     @Async
     public void processVideoUpload(Long reelId, MultipartFile videoFile) {
         Reel reel = reelRepository.findById(reelId)
@@ -68,17 +54,14 @@ public class ReelService {
                     "bakeaura/reels"
             );
 
-            // Extract values from Cloudinary's response map
             reel.setVideoUrl((String) result.get("secure_url"));
             reel.setCloudinaryPublicId((String) result.get("public_id"));
 
-            // Duration comes back as a Double from Cloudinary (e.g., 45.3 seconds)
             Object durationObj = result.get("duration");
             if (durationObj != null) {
                 reel.setDurationSeconds(((Double) durationObj).intValue());
             }
 
-            // The "eager" transformation we set up generates a thumbnail
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> eager = (List<Map<String, Object>>) result.get("eager");
             if (eager != null && !eager.isEmpty()) {
@@ -90,8 +73,6 @@ public class ReelService {
 
             log.info("Reel ID: {} is now ACTIVE. URL: {}", reelId, reel.getVideoUrl());
 
-            // Notify frontend via WebSocket that the upload is done
-            // The frontend will be subscribed to /topic/reels/{sellerId}
             messagingTemplate.convertAndSend(
                     "/topic/reels/" + reel.getSeller().getId(),
                     toResponseDTO(reel)
@@ -102,7 +83,6 @@ public class ReelService {
             reel.setStatus(Reel.ReelStatus.FAILED);
             reelRepository.save(reel);
 
-            // Notify frontend of failure too
             messagingTemplate.convertAndSend(
                     "/topic/reels/" + reel.getSeller().getId(),
                     Map.of("reelId", reelId, "status", "FAILED", "error", e.getMessage())
@@ -110,26 +90,17 @@ public class ReelService {
         }
     }
 
-    /**
-     * Returns all ACTIVE reels for the feed, newest first.
-     * Phase 6 will replace this with the ranking algorithm.
-     */
-    public List<ReelResponseDTO> getActiveFeed(int page, int size) {
+    public Page<ReelResponseDTO> getActiveFeed(int page, int size) {
         return reelRepository
-                .findByStatusOrderByCreatedAtDesc(Reel.ReelStatus.ACTIVE)
-                .stream()
-                .skip((long) page * size)
-                .limit(size)
-                .map(this::toResponseDTO)
-                .collect(Collectors.toList());
+                .findByStatusOrderByCreatedAtDesc(
+                        Reel.ReelStatus.ACTIVE,
+                        PageRequest.of(page, size, Sort.by("createdAt").descending()))
+                .map(this::toResponseDTO);
     }
 
-    /**
-     * Get reels by a specific seller (for their profile page)
-     */
     public List<ReelResponseDTO> getSellerReels(Long sellerId) {
         return reelRepository
-                .findBySellerIdAndStatusOrderByCreatedAtDesc(sellerId, Reel.ReelStatus.ACTIVE)
+                .findBySeller_IdAndStatusOrderByCreatedAtDesc(sellerId, Reel.ReelStatus.ACTIVE)
                 .stream()
                 .map(this::toResponseDTO)
                 .collect(Collectors.toList());

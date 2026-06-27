@@ -8,6 +8,8 @@ import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ public class SellerService {
                 .toList();
     }
 
+    @Cacheable(value = "sellerProfiles", key = "#id")
     public SellerProfileDto getSeller(Long id) {
         User seller = userRepository.findById(id)
                 .filter(user -> user.getRole() == Role.SELLER)
@@ -46,6 +49,7 @@ public class SellerService {
     }
 
     @Transactional
+    @CacheEvict(value = "sellerProfiles", key = "#userId")
     public SellerProfileDto updateProfile(Long userId, UpdateSellerProfileDto request) {
         User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -67,6 +71,7 @@ public class SellerService {
     }
 
     @Transactional
+    @CacheEvict(value = "sellerProfiles", key = "#userId")
     public SellerProfileDto toggleOpen(Long userId) {
         User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));

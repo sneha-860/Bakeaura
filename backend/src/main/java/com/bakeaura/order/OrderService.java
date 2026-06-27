@@ -1,6 +1,5 @@
 package com.bakeaura.order;
 
-
 import com.bakeaura.map.MapService;
 import com.bakeaura.cart.CartDto;
 import com.bakeaura.cart.CartItemDto;
@@ -19,6 +18,10 @@ import com.bakeaura.payment.PaymentService;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,7 +58,6 @@ public class OrderService {
             throw new BadRequestException("Target user is not a seller");
         }
 
-        // ---- Validate delivery radius ----
         validateLocation(seller.getLatitude(), seller.getLongitude(), "Seller location is not configured");
         validateLocation(request.getDeliveryLatitude(), request.getDeliveryLongitude(), "Delivery location is required");
 
@@ -77,13 +79,13 @@ public class OrderService {
                 if (product.getMinAdvanceDays() != null) {
                     LocalDate earliestDate = LocalDate.now().plusDays(product.getMinAdvanceDays());
                     if (request.getScheduledDeliveryDate().isBefore(earliestDate)) {
-                        throw new BadRequestException("Product " + product.getName() + " requires at least " + product.getMinAdvanceDays() + " days advance notice");
+                        throw new BadRequestException("Product " + product.getName() +
+                                " requires at least " + product.getMinAdvanceDays() + " days advance notice");
                     }
                 }
             }
         }
 
-        // ---- Build order ----
         Order order = Order.builder()
                 .customer(customer)
                 .seller(seller)
@@ -99,9 +101,9 @@ public class OrderService {
 
         for (CreateOrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
             Product product = productService.getProductEntityById(itemReq.getProductId());
-            // Ensure product belongs to this seller
             if (!product.getSeller().getId().equals(seller.getId())) {
-                throw new BadRequestException("Product " + product.getId() + " does not belong to the seller");
+                throw new BadRequestException("Product " + product.getId() +
+                        " does not belong to the seller");
             }
             validateProductForOrder(product, itemReq.getQuantity());
 
@@ -118,7 +120,6 @@ public class OrderService {
         order.setTotalAmount(total);
         Order saved = orderRepository.save(order);
 
-        // ---- Create Razorpay order ----
         String razorpayOrderId = paymentService.createRazorpayOrder(total, saved.getId());
         saved.setRazorpayOrderId(razorpayOrderId);
         paymentService.createPendingPayment(saved, razorpayOrderId);
@@ -138,7 +139,8 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponseDto createOrderFromCart(CreateOrderFromCartRequestDto request, String customerEmail) {
+    public OrderResponseDto createOrderFromCart(CreateOrderFromCartRequestDto request,
+                                                String customerEmail) {
         CartDto cart = cartService.getCartWithoutSync(customerEmail);
         if (cart.getItems().isEmpty()) {
             throw new BadRequestException("Cart is empty");
@@ -170,7 +172,6 @@ public class OrderService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Only the seller of this order or an ADMIN can update status
         boolean isSeller = order.getSeller().getId().equals(user.getId());
         boolean isAdmin = user.getRole().equals(Role.ADMIN);
 
@@ -181,10 +182,11 @@ public class OrderService {
         validateTransition(order.getStatus(), newStatus);
         order.setStatus(newStatus);
 
-        // If confirming, set estimated delivery time
         if (newStatus == OrderStatus.CONFIRMED) {
-            validateLocation(order.getSeller().getLatitude(), order.getSeller().getLongitude(), "Seller location is not configured");
-            validateLocation(order.getDeliveryLatitude(), order.getDeliveryLongitude(), "Delivery location is not configured");
+            validateLocation(order.getSeller().getLatitude(),
+                    order.getSeller().getLongitude(), "Seller location is not configured");
+            validateLocation(order.getDeliveryLatitude(),
+                    order.getDeliveryLongitude(), "Delivery location is not configured");
 
             Integer eta = mapService.getEstimatedDeliveryMinutes(
                     order.getSeller().getLatitude(), order.getSeller().getLongitude(),
@@ -195,7 +197,6 @@ public class OrderService {
 
         Order updated = orderRepository.save(order);
 
-        // Broadcast status update via WebSocket to all subscribers of this order
         orderTrackingService.broadcastStatusUpdate(orderId, newStatus);
         notificationService.notifyUser(
                 order.getCustomer().getEmail(),
@@ -207,21 +208,25 @@ public class OrderService {
         return toResponse(updated);
     }
 
-    public List<OrderResponseDto> getMyOrders(String customerEmail) {
+    public Page<OrderResponseDto> getMyOrders(String customerEmail, int page, int size) {
         User customer = userRepository.findByEmail(customerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        return orderRepository.findByCustomer_IdOrderByCreatedAtDesc(customer.getId())
-                .stream().map(this::toResponse).collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        return orderRepository
+                .findByCustomer_IdOrderByCreatedAtDesc(customer.getId(), pageable)
+                .map(this::toResponse);
     }
 
-    public List<OrderResponseDto> getSellerOrders(String sellerEmail, OrderStatus status) {
+    public Page<OrderResponseDto> getSellerOrders(String sellerEmail, OrderStatus status,
+                                                  int page, int size) {
         User seller = userRepository.findByEmail(sellerEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        List<Order> orders = status == null
-                ? orderRepository.findBySeller_IdOrderByCreatedAtDesc(seller.getId())
-                : orderRepository.findBySeller_IdAndStatusOrderByCreatedAtDesc(seller.getId(), status);
-        return orders
-                .stream().map(this::toResponse).collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Page<Order> orders = status == null
+                ? orderRepository.findBySeller_IdOrderByCreatedAtDesc(seller.getId(), pageable)
+                : orderRepository.findBySeller_IdAndStatusOrderByCreatedAtDesc(
+                seller.getId(), status, pageable);
+        return orders.map(this::toResponse);
     }
 
     public OrderResponseDto getOrderById(Long orderId, String userEmail) {
@@ -252,7 +257,8 @@ public class OrderService {
         if (!order.getCustomer().getId().equals(customer.getId())) {
             throw new AccessDeniedException("Access denied");
         }
-        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.CONFIRMED) {
+        if (order.getStatus() != OrderStatus.PENDING &&
+                order.getStatus() != OrderStatus.CONFIRMED) {
             throw new BadRequestException("Order cannot be cancelled at this stage");
         }
 
@@ -275,20 +281,18 @@ public class OrderService {
         return item;
     }
 
-    // ---- State machine: enforce valid transitions ----
     private void validateTransition(OrderStatus current, OrderStatus next) {
         boolean valid = switch (current) {
             case PENDING -> next == OrderStatus.CONFIRMED || next == OrderStatus.CANCELLED;
             case CONFIRMED -> next == OrderStatus.PREPARING || next == OrderStatus.CANCELLED;
             case PREPARING -> next == OrderStatus.OUT_FOR_DELIVERY || next == OrderStatus.CANCELLED;
             case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED;
-            case DELIVERED, CANCELLED -> false;  // Terminal states
+            case DELIVERED, CANCELLED -> false;
         };
 
         if (!valid) {
             throw new BadRequestException(
-                    "Cannot transition from " + current + " to " + next
-            );
+                    "Cannot transition from " + current + " to " + next);
         }
     }
 
@@ -306,11 +310,11 @@ public class OrderService {
             throw new BadRequestException("Product " + product.getId() + " is not available");
         }
         if (product.getStockQuantity() != null && quantity > product.getStockQuantity()) {
-            throw new BadRequestException("Requested quantity exceeds available stock for product " + product.getId());
+            throw new BadRequestException(
+                    "Requested quantity exceeds available stock for product " + product.getId());
         }
     }
 
-    // ---- Mapper ----
     private OrderResponseDto toResponse(Order order) {
         List<OrderResponseDto.OrderItemResponse> itemResponses = order.getItems().stream()
                 .map(item -> OrderResponseDto.OrderItemResponse.builder()

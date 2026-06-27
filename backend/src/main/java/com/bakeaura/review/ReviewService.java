@@ -6,6 +6,9 @@ import com.bakeaura.product.ProductRepository;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,16 +28,24 @@ public class ReviewService {
                 .toList();
     }
 
+    @Cacheable(value = "reviewSummaries", key = "#productId")
     public ReviewSummaryDto getSummary(Long productId) {
         Product product = getProduct(productId);
-        return new ReviewSummaryDto(productId, reviewRepository.averageRatingForProduct(product), reviewRepository.countByProduct(product));
+        return new ReviewSummaryDto(
+                productId,
+                reviewRepository.averageRatingForProduct(product),
+                reviewRepository.countByProduct(product));
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "reviewSummaries", key = "#productId")
+    })
     public ReviewDto upsertReview(String email, Long productId, ReviewRequest request) {
         User user = getUser(email);
         Product product = getProduct(productId);
-        Review review = reviewRepository.findByUserAndProduct(user, product).orElseGet(Review::new);
+        Review review = reviewRepository.findByUserAndProduct(user, product)
+                .orElseGet(Review::new);
         review.setUser(user);
         review.setProduct(product);
         review.setRating(request.getRating());
@@ -43,10 +54,14 @@ public class ReviewService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "reviewSummaries", key = "#productId")
+    })
     public void deleteReview(String email, Long productId) {
         User user = getUser(email);
         Product product = getProduct(productId);
-        reviewRepository.findByUserAndProduct(user, product).ifPresent(reviewRepository::delete);
+        reviewRepository.findByUserAndProduct(user, product)
+                .ifPresent(reviewRepository::delete);
     }
 
     private User getUser(String email) {

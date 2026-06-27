@@ -1,7 +1,5 @@
 package com.bakeaura.reel;
 
-
-
 import com.bakeaura.user.User;
 import jakarta.persistence.*;
 import lombok.Data;
