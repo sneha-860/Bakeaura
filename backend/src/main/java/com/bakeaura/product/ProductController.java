@@ -20,40 +20,29 @@ public class ProductController {
 
     private final ProductService productService;
 
-    // PUBLIC: anyone can browse products (no token needed)
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProductDto>>> getAllProducts() {
         List<ProductDto> products = productService.getAllProducts();
         return ResponseEntity.ok(ApiResponse.ok("Products fetched", products));
     }
-    // Postman: GET http://localhost:8080/api/products
 
-    // PUBLIC: search
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<List<ProductDto>>> search(@RequestParam String keyword) {
         return ResponseEntity.ok(
                 ApiResponse.ok("Results", productService.searchProducts(keyword))
         );
     }
-    // Postman: GET http://localhost:8080/api/products/search?keyword=cake
 
-    // PROTECTED: only SELLER role can create products
     @PostMapping
-    @PreAuthorize("hasRole('SELLER')")  // checks JWT role claim
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<ProductDto>> createProduct(
             @Valid @RequestBody ProductCreateDto dto,
-            // @Valid triggers Validation annotations on the DTO
             Authentication auth) {
-        // Spring injects the logged-in user's info here
-
-        String email = auth.getName(); // gets email from JWT
-        ProductDto product = productService.createProduct(dto, email);
+        Long userId = Long.parseLong(auth.getName());
+        ProductDto product = productService.createProduct(dto, userId);
         return ResponseEntity.status(201)
                 .body(ApiResponse.ok("Product created", product));
     }
-    // Postman: POST http://localhost:8080/api/products
-    // Headers: Authorization: Bearer <your_token>
-    // Body: { "name": "Chocolate Cake", "price": 499.00, ... }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductDto>> getById(@PathVariable Long id) {
@@ -68,7 +57,7 @@ public class ProductController {
             @PathVariable Long id,
             @Valid @RequestBody ProductCreateDto dto,
             Authentication auth) {
-        ProductDto product = productService.updateProduct(id, dto, auth.getName());
+        ProductDto product = productService.updateProduct(id, dto, Long.parseLong(auth.getName()));
         return ResponseEntity.ok(ApiResponse.ok("Product updated", product));
     }
 
@@ -77,7 +66,7 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Void>> deleteProduct(
             @PathVariable Long id,
             Authentication auth) {
-        productService.deleteProduct(id, auth.getName());
+        productService.deleteProduct(id, Long.parseLong(auth.getName()));
         return ResponseEntity.ok(ApiResponse.ok("Product deleted", null));
     }
 

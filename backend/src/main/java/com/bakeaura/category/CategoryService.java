@@ -2,7 +2,7 @@ package com.bakeaura.category;
 
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -16,7 +16,7 @@ import java.util.List;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
 
     @Cacheable(value = "categories", key = "'all'")
     public List<CategoryResponseDto> getAllCategories() {
@@ -67,11 +67,15 @@ public class CategoryService {
     public void deleteCategory(Long id) {
         Category category = getCategoryOrThrow(id);
 
-        if (productRepository.existsByCategoryId(id)) {
+        if (productService.existsByCategory(id)) {
             throw new BadRequestException("Cannot delete category because products are assigned to it");
         }
 
         categoryRepository.delete(category);
+    }
+
+    public long countCategories() {
+        return categoryRepository.count();
     }
 
     private Category getCategoryOrThrow(Long id) {

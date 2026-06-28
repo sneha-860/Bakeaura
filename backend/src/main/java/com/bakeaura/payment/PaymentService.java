@@ -3,20 +3,20 @@ package com.bakeaura.payment;
 import com.bakeaura.order.Order;
 import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.order.OrderItem;
-import com.bakeaura.payment.Payment;
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.order.OrderRepository;
 import com.bakeaura.product.Product;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import com.bakeaura.notification.NotificationService;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,7 +48,7 @@ public class PaymentService {
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
     private final UserRepository userRepository;
     private final OrderTrackingService orderTrackingService;
     private final NotificationService notificationService;
@@ -56,14 +56,14 @@ public class PaymentService {
     public PaymentService(RazorpayClient razorpayClient,
                           PaymentRepository paymentRepository,
                           OrderRepository orderRepository,
-                          ProductRepository productRepository,
+                          ProductService productService,
                           UserRepository userRepository,
                           OrderTrackingService orderTrackingService,
                           NotificationService notificationService) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
-        this.productRepository = productRepository;
+        this.productService = productService;
         this.userRepository = userRepository;
         this.orderTrackingService = orderTrackingService;
         this.notificationService = notificationService;
@@ -79,6 +79,7 @@ public class PaymentService {
         createPendingPayment(order, razorpayOrderId);
     }
 
+    @CircuitBreaker(name = "razorpay", fallbackMethod = "createRazorpayOrderFallback")
     @Transactional
     public String createRazorpayOrder(BigDecimal amount, Long internalOrderId) {
         try {
@@ -99,6 +100,11 @@ public class PaymentService {
         }
     }
 
+    public String createRazorpayOrderFallback(BigDecimal amount, Long internalOrderId, Throwable t) {
+        log.error("Razorpay circuit breaker triggered for order {}. Cause: {}", internalOrderId, t.getMessage());
+        throw new RuntimeException("Payment service is temporarily unavailable. Please try again in a moment.");
+    }
+
     @Transactional
     public Payment createPendingPayment(Order order, String razorpayOrderId) {
         Payment payment = Payment.builder()
@@ -111,11 +117,11 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
-    public PaymentResponseDto getPaymentByOrderId(Long orderId, String userEmail) {
+    public PaymentResponseDto getPaymentByOrderId(Long orderId, Long userId) {
         Payment payment = paymentRepository.findByOrder_Id(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Order order = payment.getOrder();
@@ -134,12 +140,16 @@ public class PaymentService {
         return new RazorpayConfigResponse(keyId, "INR");
     }
 
+    public long countPayments() {
+        return paymentRepository.count();
+    }
+
     @Transactional
-    public PaymentResponseDto verifyPayment(VerifyPaymentRequest request, String userEmail) {
+    public PaymentResponseDto verifyPayment(VerifyPaymentRequest request, Long userId) {
         Payment payment = paymentRepository.findByRazorpayOrderId(request.getRazorpayOrderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Order order = payment.getOrder();
@@ -171,7 +181,6 @@ public class PaymentService {
 
     @Transactional
     public void handleWebhook(String payload, String razorpaySignature) {
-
         if (!verifyWebhookSignature(payload, razorpaySignature)) {
             throw new BadRequestException("Invalid webhook signature");
         }
@@ -246,7 +255,7 @@ public class PaymentService {
             }
 
             product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
-            productRepository.save(product);
+            productService.saveProduct(product);
         }
     }
 
@@ -322,7 +331,7 @@ public class PaymentService {
 
     private void notifyIfUserPresent(User user, String type, String message, Long relatedId) {
         if (user != null && user.getEmail() != null) {
-            notificationService.notifyUser(user.getEmail(), type, message, relatedId);
+            notificationService.notifyUser(user.getId(), type, message, relatedId);
         }
     }
 

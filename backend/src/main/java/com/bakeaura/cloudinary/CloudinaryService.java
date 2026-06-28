@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+
 
 import java.io.IOException;
 import java.util.Map;
@@ -25,6 +27,7 @@ public class CloudinaryService {
      * a config map. "resource_type" must be "video" for video files —
      * if you leave it as default "image", the upload will fail.
      */
+    @CircuitBreaker(name = "cloudinary", fallbackMethod = "uploadVideoFallback")
     public Map<String, Object> uploadVideo(MultipartFile file, String folderName) throws IOException {
         log.info("Uploading video to Cloudinary, folder: {}, size: {} bytes",
                 folderName, file.getSize());
@@ -32,16 +35,16 @@ public class CloudinaryService {
         Map<String, Object> uploadResult = cloudinary.uploader().upload(
                 file.getBytes(),
                 ObjectUtils.asMap(
-                        "resource_type", "video",           // MUST be "video" for mp4/mov/webm
-                        "folder",        folderName,         // organizes files in Cloudinary
-                        "eager", new Object[]{               // generates a thumbnail automatically
+                        "resource_type", "video",
+                        "folder",        folderName,
+                        "eager", new Object[]{
                                 ObjectUtils.asMap(
-                                        "width", 400, "height", 711, // 9:16 vertical ratio (like Reels)
+                                        "width", 400, "height", 711,
                                         "crop", "fill",
                                         "format", "jpg"
                                 )
                         },
-                        "eager_async", false  // wait for thumbnail before returning
+                        "eager_async", false
                 )
         );
 
@@ -49,9 +52,12 @@ public class CloudinaryService {
         return uploadResult;
     }
 
-    /**
-     * Uploads an image to Cloudinary (used later for Stories and product photos)
-     */
+    public Map<String, Object> uploadVideoFallback(MultipartFile file, String folderName, Throwable t) {
+        log.error("Cloudinary circuit breaker triggered for video upload. Cause: {}", t.getMessage());
+        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+    }
+
+    @CircuitBreaker(name = "cloudinary", fallbackMethod = "uploadImageFallback")
     public Map<String, Object> uploadImage(MultipartFile file, String folderName) throws IOException {
         return cloudinary.uploader().upload(
                 file.getBytes(),
@@ -59,22 +65,28 @@ public class CloudinaryService {
                         "resource_type", "image",
                         "folder",        folderName,
                         "transformation", ObjectUtils.asMap(
-                                "quality", "auto",   // Cloudinary auto-optimizes quality
-                                "fetch_format", "auto" // serves WebP to browsers that support it
+                                "quality", "auto",
+                                "fetch_format", "auto"
                         )
                 )
         );
     }
 
-    /**
-     * Deletes a file from Cloudinary by its public_id.
-     * Call this when a seller deletes a reel or story.
-     */
+    public Map<String, Object> uploadImageFallback(MultipartFile file, String folderName, Throwable t) {
+        log.error("Cloudinary circuit breaker triggered for image upload. Cause: {}", t.getMessage());
+        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+    }
+
+    @CircuitBreaker(name = "cloudinary", fallbackMethod = "deleteFileFallback")
     public void deleteFile(String publicId, String resourceType) throws IOException {
         cloudinary.uploader().destroy(
                 publicId,
                 ObjectUtils.asMap("resource_type", resourceType)
         );
         log.info("Deleted from Cloudinary: {}", publicId);
+    }
+
+    public void deleteFileFallback(String publicId, String resourceType, Throwable t) {
+        log.warn("Cloudinary circuit breaker triggered for delete. Public ID: {}. Cause: {}", publicId, t.getMessage());
     }
 }

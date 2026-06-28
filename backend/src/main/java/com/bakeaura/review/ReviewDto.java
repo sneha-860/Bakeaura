@@ -9,9 +9,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ReviewDto {
     private Long id;
-    private Long productId;
-    private Long userId;
-    private String userName;
+    private Long sellerId;
+    private Long customerId;
+    private String customerName;
+    private Long orderId;
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;

@@ -23,7 +23,7 @@ public class CartController {
     public ResponseEntity<ApiResponse<CartDto>> getCart(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Cart fetched",
-                cartService.getCart(authentication.getName())
+                cartService.getCart(Long.parseLong(authentication.getName()))
         ));
     }
 
@@ -34,7 +34,7 @@ public class CartController {
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Item added to cart",
-                cartService.addItem(authentication.getName(), productId, quantity)
+                cartService.addItem(Long.parseLong(authentication.getName()), productId, quantity)
         ));
     }
 
@@ -44,7 +44,7 @@ public class CartController {
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Item removed from cart",
-                cartService.removeItem(authentication.getName(), productId)
+                cartService.removeItem(Long.parseLong(authentication.getName()), productId)
         ));
     }
 
@@ -55,13 +55,13 @@ public class CartController {
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Cart item updated",
-                cartService.updateQuantity(authentication.getName(), productId, quantity)
+                cartService.updateQuantity(Long.parseLong(authentication.getName()), productId, quantity)
         ));
     }
 
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> clearCart(Authentication authentication) {
-        cartService.clearCart(authentication.getName());
+        cartService.clearCart(Long.parseLong(authentication.getName()));
         return ResponseEntity.ok(ApiResponse.ok("Cart cleared", null));
     }
 }

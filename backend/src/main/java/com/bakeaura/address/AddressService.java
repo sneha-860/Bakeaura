@@ -15,16 +15,16 @@ import java.util.List;
 public class AddressService {
     private final AddressRepository addressRepository;
     private final UserRepository userRepository;
-    public List<AddressDto> getAddresses(String email) {
-        User user = getUser(email);
+    public List<AddressDto> getAddresses(Long userId) {
+        User user = getUser(userId);
         return addressRepository.findByUserOrderByDefaultAddressDescCreatedAtDesc(user).stream()
                 .map(this::toDto)
                 .toList();
     }
 
     @Transactional
-    public AddressDto createAddress(String email, AddressRequest request) {
-        User user = getUser(email);
+    public AddressDto createAddress(Long userId, AddressRequest request) {
+        User user = getUser(userId);
         Address address = new Address();
         address.setUser(user);
         apply(address, request);
@@ -35,8 +35,8 @@ public class AddressService {
     }
 
     @Transactional
-    public AddressDto updateAddress(String email, Long id, AddressRequest request) {
-        User user = getUser(email);
+    public AddressDto updateAddress(Long userId, Long id, AddressRequest request) {
+        User user = getUser(userId);
         Address address = getOwnedAddress(id, user);
         apply(address, request);
         if (Boolean.TRUE.equals(address.getDefaultAddress())) {
@@ -46,14 +46,14 @@ public class AddressService {
     }
 
     @Transactional
-    public void deleteAddress(String email, Long id) {
-        User user = getUser(email);
+    public void deleteAddress(Long userId, Long id) {
+        User user = getUser(userId);
         addressRepository.delete(getOwnedAddress(id, user));
     }
 
     @Transactional
-    public AddressDto setDefault(String email, Long id) {
-        User user = getUser(email);
+    public AddressDto setDefault(Long userId, Long id) {
+        User user = getUser(userId);
         Address address = getOwnedAddress(id, user);
         clearDefaults(user, id);
         address.setDefaultAddress(true);
@@ -86,8 +86,8 @@ public class AddressService {
         return address;
     }
 
-    private User getUser(String email) {
-        return userRepository.findByEmail(email)
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 

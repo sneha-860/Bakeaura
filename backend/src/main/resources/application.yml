@@ -92,3 +92,38 @@ jwt:
   secret: ${JWT_SECRET}
   access-expiration: 900000
   refresh-expiration: 604800000
+
+# ==========================================
+# RESILIENCE4J CIRCUIT BREAKERS
+# ==========================================
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      razorpay:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-calls-in-half-open-state: 3
+        slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 50
+        automatic-transition-from-open-to-half-open-enabled: true
+      cloudinary:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-calls-in-half-open-state: 3
+        slow-call-duration-threshold: 5s
+        slow-call-rate-threshold: 50
+        automatic-transition-from-open-to-half-open-enabled: true
+      gemini:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 2
+        slow-call-duration-threshold: 10s
+        slow-call-rate-threshold: 50
+        automatic-transition-from-open-to-half-open-enabled: true

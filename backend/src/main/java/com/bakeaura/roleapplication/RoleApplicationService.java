@@ -28,8 +28,8 @@ public class RoleApplicationService {
 
 
     @Transactional
-    public RoleApplicationResponse apply(String email, RoleApplicationRequest request) {
-        User user = getActiveUserByEmail(email);
+    public RoleApplicationResponse apply(Long userId, RoleApplicationRequest request) {
+        User user = getActiveUserById(userId);
         Role requestedRole = request.getRequestedRole();
 
         if (requestedRole != Role.SELLER && requestedRole != Role.INFLUENCER) {
@@ -56,8 +56,8 @@ public class RoleApplicationService {
         return toResponse(roleApplicationRepository.save(application));
     }
 
-    public List<RoleApplicationResponse> getMyApplications(String email) {
-        User user = getActiveUserByEmail(email);
+    public List<RoleApplicationResponse> getMyApplications(Long userId) {
+        User user = getActiveUserById(userId);
 
         return roleApplicationRepository.findByUserOrderByCreatedAtDesc(user)
                 .stream()
@@ -114,14 +114,12 @@ public class RoleApplicationService {
         return toResponse(roleApplicationRepository.save(application));
     }
 
-    private User getActiveUserByEmail(String email) {
-        User user = userRepository.findByEmail(email)
+    private User getActiveUserById(Long userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
         if (!Boolean.TRUE.equals(user.getIsActive())) {
             throw new BadRequestException("User account is inactive");
         }
-
         return user;
     }
 

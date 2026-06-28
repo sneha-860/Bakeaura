@@ -25,7 +25,7 @@ public class OrderController {
             Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Order created",
-                        orderService.createOrder(request, authentication.getName())));
+                        orderService.createOrder(request, Long.parseLong(authentication.getName()))));
     }
 
     @PostMapping("/from-cart")
@@ -35,7 +35,7 @@ public class OrderController {
             Authentication authentication) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Order created",
-                        orderService.createOrderFromCart(request, authentication.getName())));
+                        orderService.createOrderFromCart(request, Long.parseLong(authentication.getName()))));
     }
 
     @PatchMapping("/{orderId}/status")
@@ -45,7 +45,7 @@ public class OrderController {
             @RequestParam OrderStatus status,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Order status updated",
-                orderService.updateStatus(orderId, status, authentication.getName())));
+                orderService.updateStatus(orderId, status, Long.parseLong(authentication.getName()))));
     }
 
     @GetMapping("/my-orders")
@@ -55,7 +55,7 @@ public class OrderController {
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Orders fetched",
-                orderService.getMyOrders(authentication.getName(), page, size)));
+                orderService.getMyOrders(Long.parseLong(authentication.getName()), page, size)));
     }
 
     @GetMapping("/seller-orders")
@@ -66,7 +66,7 @@ public class OrderController {
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Seller orders fetched",
-                orderService.getSellerOrders(authentication.getName(), status, page, size)));
+                orderService.getSellerOrders(Long.parseLong(authentication.getName()), status, page, size)));
     }
 
     @GetMapping("/{orderId}")
@@ -75,7 +75,7 @@ public class OrderController {
             @PathVariable Long orderId,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Order fetched",
-                orderService.getOrderById(orderId, authentication.getName())));
+                orderService.getOrderById(orderId, Long.parseLong(authentication.getName()))));
     }
 
     @PostMapping("/{orderId}/cancel")
@@ -84,6 +84,6 @@ public class OrderController {
             @PathVariable Long orderId,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok("Order cancelled",
-                orderService.cancelOrder(orderId, authentication.getName())));
+                orderService.cancelOrder(orderId, Long.parseLong(authentication.getName()))));
     }
 }

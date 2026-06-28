@@ -5,11 +5,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/users")
@@ -19,7 +15,7 @@ public class UserController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserDto>> me(Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok("Profile fetched", userService.getMe(authentication.getName())));
+        return ResponseEntity.ok(ApiResponse.ok("Profile fetched", userService.getMe(Long.parseLong(authentication.getName()))));
     }
 
     @PatchMapping("/me")
@@ -28,7 +24,7 @@ public class UserController {
             @Valid @RequestBody UserProfileUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Profile updated",
-                userService.updateProfile(authentication.getName(), request)
+                userService.updateProfile(Long.parseLong(authentication.getName()), request)
         ));
     }
 
@@ -36,7 +32,15 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> changePassword(
             Authentication authentication,
             @Valid @RequestBody ChangePasswordRequest request) {
-        userService.changePassword(authentication.getName(), request);
+        userService.changePassword(Long.parseLong(authentication.getName()), request);
         return ResponseEntity.ok(ApiResponse.ok("Password changed", null));
+    }
+
+    @PostMapping("/me/change-email")
+    public ResponseEntity<ApiResponse<Void>> requestEmailChange(
+            Authentication authentication,
+            @Valid @RequestBody ChangeEmailRequest request) {
+        userService.requestEmailChange(Long.parseLong(authentication.getName()), request);
+        return ResponseEntity.ok(ApiResponse.ok("Verification email sent to your new address", null));
     }
 }

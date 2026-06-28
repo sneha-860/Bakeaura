@@ -23,23 +23,23 @@ public class FavoriteController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ProductDto>>> getFavorites(Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok("Favorites fetched", favoriteService.getFavorites(authentication.getName())));
+        return ResponseEntity.ok(ApiResponse.ok("Favorites fetched", favoriteService.getFavorites(Long.parseLong(authentication.getName()))));
     }
 
     @PostMapping("/{productId}")
     public ResponseEntity<ApiResponse<List<ProductDto>>> addFavorite(Authentication authentication, @PathVariable Long productId) {
-        return ResponseEntity.ok(ApiResponse.ok("Favorite added", favoriteService.addFavorite(authentication.getName(), productId)));
+        return ResponseEntity.ok(ApiResponse.ok("Favorite added", favoriteService.addFavorite(Long.parseLong(authentication.getName()), productId)));
     }
 
     @DeleteMapping("/{productId}")
     public ResponseEntity<ApiResponse<List<ProductDto>>> removeFavorite(Authentication authentication, @PathVariable Long productId) {
-        return ResponseEntity.ok(ApiResponse.ok("Favorite removed", favoriteService.removeFavorite(authentication.getName(), productId)));
+        return ResponseEntity.ok(ApiResponse.ok("Favorite removed", favoriteService.removeFavorite(Long.parseLong(authentication.getName()), productId)));
     }
 
     @GetMapping("/{productId}")
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> isFavorite(Authentication authentication, @PathVariable Long productId) {
         return ResponseEntity.ok(ApiResponse.ok("Favorite status fetched", Map.of(
-                "favorite", favoriteService.isFavorite(authentication.getName(), productId)
+                "favorite", favoriteService.isFavorite(Long.parseLong(authentication.getName()), productId)
         )));
     }
 }

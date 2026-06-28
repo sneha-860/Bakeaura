@@ -3,7 +3,7 @@ package com.bakeaura.cart;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.product.Product;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
@@ -21,7 +21,7 @@ import java.util.Optional;
 public class CartService {
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final ProductRepository productRepository;
+    private final ProductService productService;
     private final UserRepository userRepository;
 
     private static final Duration CART_TTL = Duration.ofDays(7);
@@ -31,13 +31,13 @@ public class CartService {
         return CART_KEY_PREFIX + userId;
     }
 
-    public CartDto getCart(String userEmail) {
-        User user = getUserByEmail(userEmail);
+    public CartDto getCart(Long userId) {
+        User user = getUserById(userId);
         return getCartForUser(user);
     }
 
-    public CartDto getCartWithoutSync(String userEmail) {
-        User user = getUserByEmail(userEmail);
+    public CartDto getCartWithoutSync(Long userId) {
+        User user = getUserById(userId);
         Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
         if (cached instanceof CartDto cart) {
             return cart;
@@ -55,8 +55,8 @@ public class CartService {
         return new CartDto(user.getEmail(), new java.util.ArrayList<>());
     }
 
-    public CartDto addItem(String userEmail, Long productId, int quantity) {
-        User user = getUserByEmail(userEmail);
+    public CartDto addItem(Long userId, Long productId, int quantity) {
+        User user = getUserById(userId);
         validateQuantity(quantity);
 
         Product product = getAvailableProduct(productId);
@@ -87,20 +87,20 @@ public class CartService {
         return cart;
     }
 
-    public CartDto removeItem(String userEmail, Long productId) {
-        User user = getUserByEmail(userEmail);
+    public CartDto removeItem(Long userId, Long productId) {
+        User user = getUserById(userId);
         CartDto cart = getCartForUser(user);
         cart.getItems().removeIf(i -> i.getProductId().equals(productId));
         saveCart(user, cart);
         return cart;
     }
 
-    public CartDto updateQuantity(String userEmail, Long productId, int quantity) {
-        User user = getUserByEmail(userEmail);
+    public CartDto updateQuantity(Long userId, Long productId, int quantity) {
+        User user = getUserById(userId);
         CartDto cart = getCartForUser(user);
 
         if (quantity <= 0) {
-            return removeItem(userEmail, productId);
+            return removeItem(userId, productId);
         }
 
         Product product = getAvailableProduct(productId);
@@ -119,14 +119,16 @@ public class CartService {
         return cart;
     }
 
-    public void clearCart(String userEmail) {
-        User user = getUserByEmail(userEmail);
+    public void clearCart(Long userId) {
+        User user = getUserById(userId);
         redisTemplate.delete(cartKey(user.getId()));
     }
 
     @EventListener
     public void handleOrderCreated(OrderCreatedEvent event) {
-        clearCart(event.getCustomerEmail());
+        User user = userRepository.findByEmail(event.getCustomerEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        clearCart(user.getId());
     }
 
     private void saveCart(User user, CartDto cart) {
@@ -134,14 +136,13 @@ public class CartService {
         redisTemplate.opsForValue().set(cartKey(user.getId()), cart, CART_TTL);
     }
 
-    private User getUserByEmail(String userEmail) {
-        return userRepository.findByEmail(userEmail)
+    private User getUserById(Long userId) {
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     private Product getAvailableProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        Product product = productService.getProductEntityById(productId);
 
         if (!Boolean.TRUE.equals(product.getIsAvailable())) {
             throw new BadRequestException("Product is not available");
@@ -172,14 +173,15 @@ public class CartService {
 
         while (iterator.hasNext()) {
             CartItemDto item = iterator.next();
-            Optional<Product> productOptional = productRepository.findById(item.getProductId());
 
-            if (productOptional.isEmpty()) {
+            Product product;
+            try {
+                product = productService.getProductEntityById(item.getProductId());
+            } catch (ResourceNotFoundException e) {
                 iterator.remove();
                 continue;
             }
 
-            Product product = productOptional.get();
             if (!Boolean.TRUE.equals(product.getIsAvailable())
                     || item.getQuantity() == null
                     || item.getQuantity() <= 0

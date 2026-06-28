@@ -52,6 +52,18 @@ public class EmailService {
         sendEmail(toEmail, subject, body);
     }
 
+    @Async
+    public void sendEmailChangeVerification(String toEmail, String token) {
+        String subject = "Confirm your new email - Bakeaura";
+        String verificationLink = baseUrl + "/api/auth/verify-email-change?token=" + token;
+        String body = "<h2>Confirm your new email address</h2>"
+                + "<p>Click the link below to confirm this email address for your Bakeaura account.</p>"
+                + "<a href='" + verificationLink + "'>Confirm Email Change</a>"
+                + "<p>This link expires in 24 hours.</p>"
+                + "<p>If you did not request this change, please ignore this email.</p>";
+        sendEmail(toEmail, subject, body);
+    }
+
     private void sendEmail(String toEmail,String subject , String body){
         try {
             MimeMessage message =mailSender.createMimeMessage();

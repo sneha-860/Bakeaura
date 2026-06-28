@@ -18,20 +18,18 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor  // Lombok: auto-generates constructor for final fields
+@RequiredArgsConstructor
 public class ProductService {
 
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
 
-    // Create a product (only sellers can do this — enforced in controller)
     @CacheEvict(value = "products", allEntries = true)
-    public ProductDto createProduct(ProductCreateDto dto, String sellerEmail) {
-        User seller = userRepository.findByEmail(sellerEmail)
+    public ProductDto createProduct(ProductCreateDto dto, Long userId) {
+        User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Business rule: only verified sellers can list products
         if (seller.getRole() != Role.SELLER) {
             throw new RuntimeException("Only sellers can create products");
         }
@@ -50,7 +48,6 @@ public class ProductService {
         product.setIsAvailable(true);
 
         return toDto(productRepository.save(product));
-        // save() does INSERT and returns the saved object with generated ID
     }
 
     @Cacheable(value = "products", key = "'all'")
@@ -70,6 +67,10 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
     }
 
+    public void saveProduct(Product product) {
+        productRepository.save(product);
+    }
+
     @Cacheable(value = "products", key = "'search:' + #keyword")
     public List<ProductDto> searchProducts(String keyword) {
         return productRepository.findByNameContainingIgnoreCase(keyword).stream()
@@ -78,11 +79,11 @@ public class ProductService {
     }
 
     @CacheEvict(value = "products", allEntries = true)
-    public ProductDto updateProduct(Long id, ProductCreateDto dto, String sellerEmail) {
+    public ProductDto updateProduct(Long id, ProductCreateDto dto, Long userId) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        User seller = userRepository.findByEmail(sellerEmail)
+        User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!product.getSeller().getId().equals(seller.getId())) {
@@ -103,11 +104,11 @@ public class ProductService {
     }
 
     @CacheEvict(value = "products", allEntries = true)
-    public void deleteProduct(Long id, String sellerEmail) {
+    public void deleteProduct(Long id, Long userId) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
-        User seller = userRepository.findByEmail(sellerEmail)
+        User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!product.getSeller().getId().equals(seller.getId())) {
@@ -160,6 +161,14 @@ public class ProductService {
         return productRepository.findByCategoryId(categoryId).stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    public long countProducts() {
+        return productRepository.count();
+    }
+
+    public boolean existsByCategory(Long categoryId) {
+        return productRepository.existsByCategoryId(categoryId);
     }
 
     public ProductDto toDto(Product product) {

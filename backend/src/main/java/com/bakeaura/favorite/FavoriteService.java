@@ -3,7 +3,6 @@ package com.bakeaura.favorite;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductDto;
-import com.bakeaura.product.ProductRepository;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
@@ -18,11 +17,10 @@ import java.util.List;
 public class FavoriteService {
     private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
-    private final ProductRepository productRepository;
     private final ProductService productService;
 
-    public List<ProductDto> getFavorites(String email) {
-        User user = getUser(email);
+    public List<ProductDto> getFavorites(Long userId) {
+        User user = getUser(userId);
         return favoriteRepository.findByUserOrderByCreatedAtDesc(user).stream()
                 .map(Favorite::getProduct)
                 .map(productService::toDto)
@@ -30,8 +28,8 @@ public class FavoriteService {
     }
 
     @Transactional
-    public List<ProductDto> addFavorite(String email, Long productId) {
-        User user = getUser(email);
+    public List<ProductDto> addFavorite(Long userId, Long productId) {
+        User user = getUser(userId);
         Product product = getProduct(productId);
         if (!favoriteRepository.existsByUserAndProduct(user, product)) {
             Favorite favorite = new Favorite();
@@ -39,28 +37,27 @@ public class FavoriteService {
             favorite.setProduct(product);
             favoriteRepository.save(favorite);
         }
-        return getFavorites(email);
+        return getFavorites(userId);
     }
 
     @Transactional
-    public List<ProductDto> removeFavorite(String email, Long productId) {
-        User user = getUser(email);
+    public List<ProductDto> removeFavorite(Long userId, Long productId) {
+        User user = getUser(userId);
         Product product = getProduct(productId);
         favoriteRepository.findByUserAndProduct(user, product).ifPresent(favoriteRepository::delete);
-        return getFavorites(email);
+        return getFavorites(userId);
     }
 
-    public boolean isFavorite(String email, Long productId) {
-        return favoriteRepository.existsByUserAndProduct(getUser(email), getProduct(productId));
+    public boolean isFavorite(Long userId, Long productId) {
+        return favoriteRepository.existsByUserAndProduct(getUser(userId), getProduct(productId));
     }
 
-    private User getUser(String email) {
-        return userRepository.findByEmail(email)
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     private Product getProduct(Long productId) {
-        return productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        return productService.getProductEntityById(productId);
     }
 }

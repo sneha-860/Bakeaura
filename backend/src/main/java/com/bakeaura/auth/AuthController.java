@@ -1,6 +1,7 @@
 package com.bakeaura.auth;
 
 import com.bakeaura.common.ApiResponse;
+import com.bakeaura.user.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import com.bakeaura.user.ChangeEmailRequest;
 
 
 @RestController
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 @RequiredArgsConstructor
 public class AuthController {
     private final AuthService authService;
+    private final UserService userService;
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
@@ -43,5 +46,11 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam String token) {
         authService.verifyEmail(token);
         return ResponseEntity.ok(ApiResponse.ok("Email verified", null));
+    }
+
+    @GetMapping("/verify-email-change")
+    public ResponseEntity<ApiResponse<Void>> verifyEmailChange(@RequestParam String token) {
+        userService.confirmEmailChange(token);
+        return ResponseEntity.ok(ApiResponse.ok("Email updated successfully", null));
     }
 }

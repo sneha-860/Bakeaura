@@ -28,14 +28,14 @@ public class AddressController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<AddressDto>>> getAddresses(Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok("Addresses fetched", addressService.getAddresses(authentication.getName())));
+        return ResponseEntity.ok(ApiResponse.ok("Addresses fetched", addressService.getAddresses(Long.parseLong(authentication.getName()))));
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<AddressDto>> createAddress(
             Authentication authentication,
             @Valid @RequestBody AddressRequest request) {
-        return ResponseEntity.status(201).body(ApiResponse.ok("Address created", addressService.createAddress(authentication.getName(), request)));
+        return ResponseEntity.status(201).body(ApiResponse.ok("Address created", addressService.createAddress(Long.parseLong(authentication.getName()), request)));
     }
 
     @PutMapping("/{id}")
@@ -43,17 +43,17 @@ public class AddressController {
             Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody AddressRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Address updated", addressService.updateAddress(authentication.getName(), id, request)));
+        return ResponseEntity.ok(ApiResponse.ok("Address updated", addressService.updateAddress(Long.parseLong(authentication.getName()), id, request)));
     }
 
     @PatchMapping("/{id}/default")
     public ResponseEntity<ApiResponse<AddressDto>> setDefault(Authentication authentication, @PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok("Default address updated", addressService.setDefault(authentication.getName(), id)));
+        return ResponseEntity.ok(ApiResponse.ok("Default address updated", addressService.setDefault(Long.parseLong(authentication.getName()), id)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteAddress(Authentication authentication, @PathVariable Long id) {
-        addressService.deleteAddress(authentication.getName(), id);
+        addressService.deleteAddress(Long.parseLong(authentication.getName()), id);
         return ResponseEntity.ok(ApiResponse.ok("Address deleted", null));
     }
 }

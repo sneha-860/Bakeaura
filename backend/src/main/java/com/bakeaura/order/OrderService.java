@@ -49,9 +49,9 @@ public class OrderService {
     private final SmsService smsService;
 
     @Transactional
-    public OrderResponseDto createOrder(CreateOrderRequestDto request, String customerEmail) {
+    public OrderResponseDto createOrder(CreateOrderRequestDto request, Long customerId) {
 
-        User customer = userRepository.findByEmail(customerEmail)
+        User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
 
         User seller = userRepository.findById(request.getSellerId())
@@ -124,7 +124,7 @@ public class OrderService {
         Order saved = orderRepository.save(order);
 
         eventPublisher.publishEvent(
-                new OrderCreatedEvent(this, saved, customerEmail, request.getReferralCode())
+                new OrderCreatedEvent(this, saved, customer.getEmail(), request.getReferralCode())
         );
 
         return toResponse(orderRepository.save(saved));
@@ -132,8 +132,8 @@ public class OrderService {
 
     @Transactional
     public OrderResponseDto createOrderFromCart(CreateOrderFromCartRequestDto request,
-                                                String customerEmail) {
-        CartDto cart = cartService.getCartWithoutSync(customerEmail);
+                                                Long customerId) {
+        CartDto cart = cartService.getCartWithoutSync(customerId);
         if (cart.getItems().isEmpty()) {
             throw new BadRequestException("Cart is empty");
         }
@@ -150,16 +150,16 @@ public class OrderService {
                 .map(this::toOrderItemRequest)
                 .toList());
 
-        return createOrder(orderRequest, customerEmail);
+        return createOrder(orderRequest, customerId);
     }
 
     @Transactional
-    public OrderResponseDto updateStatus(Long orderId, OrderStatus newStatus, String userEmail) {
+    public OrderResponseDto updateStatus(Long orderId, OrderStatus newStatus, Long userId) {
 
         Order order = orderRepository.findByIdWithItems(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         boolean isSeller = order.getSeller().getId().equals(user.getId());
@@ -214,7 +214,7 @@ public class OrderService {
 
         orderTrackingService.broadcastStatusUpdate(orderId, newStatus);
         notificationService.notifyUser(
-                order.getCustomer().getEmail(),
+                order.getCustomer().getId(),
                 "ORDER_STATUS",
                 "Order #" + orderId + " status changed to " + newStatus,
                 orderId
@@ -223,8 +223,8 @@ public class OrderService {
         return toResponse(updated);
     }
 
-    public Page<OrderResponseDto> getMyOrders(String customerEmail, int page, int size) {
-        User customer = userRepository.findByEmail(customerEmail)
+    public Page<OrderResponseDto> getMyOrders(Long customerId, int page, int size) {
+        User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return orderRepository
@@ -232,9 +232,9 @@ public class OrderService {
                 .map(this::toResponse);
     }
 
-    public Page<OrderResponseDto> getSellerOrders(String sellerEmail, OrderStatus status,
+    public Page<OrderResponseDto> getSellerOrders(Long sellerId, OrderStatus status,
                                                   int page, int size) {
-        User seller = userRepository.findByEmail(sellerEmail)
+        User seller = userRepository.findById(sellerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Order> orders = status == null
@@ -244,11 +244,11 @@ public class OrderService {
         return orders.map(this::toResponse);
     }
 
-    public OrderResponseDto getOrderById(Long orderId, String userEmail) {
+    public OrderResponseDto getOrderById(Long orderId, Long userId) {
         Order order = orderRepository.findByIdWithItems(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        User user = userRepository.findByEmail(userEmail)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         boolean isCustomer = order.getCustomer().getId().equals(user.getId());
@@ -263,10 +263,10 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponseDto cancelOrder(Long orderId, String customerEmail) {
+    public OrderResponseDto cancelOrder(Long orderId, Long customerId) {
         Order order = orderRepository.findByIdWithItems(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
-        User customer = userRepository.findByEmail(customerEmail)
+        User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!order.getCustomer().getId().equals(customer.getId())) {
@@ -281,12 +281,16 @@ public class OrderService {
         Order updated = orderRepository.save(order);
         orderTrackingService.broadcastStatusUpdate(orderId, OrderStatus.CANCELLED);
         notificationService.notifyUser(
-                order.getSeller().getEmail(),
+                order.getSeller().getId(),
                 "ORDER_CANCELLED",
                 "Order #" + orderId + " was cancelled by the customer.",
                 orderId
         );
         return toResponse(updated);
+    }
+
+    public long countOrders() {
+        return orderRepository.count();
     }
 
     private CreateOrderRequestDto.OrderItemRequest toOrderItemRequest(CartItemDto cartItem) {

@@ -39,7 +39,7 @@ public class PaymentController {
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Payment fetched",
-                paymentService.getPaymentByOrderId(orderId, authentication.getName())
+                paymentService.getPaymentByOrderId(orderId, Long.parseLong(authentication.getName()))
         ));
     }
 
@@ -54,7 +54,7 @@ public class PaymentController {
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Payment verified",
-                paymentService.verifyPayment(request, authentication.getName())
+                paymentService.verifyPayment(request, Long.parseLong(authentication.getName()))
         ));
     }
 }

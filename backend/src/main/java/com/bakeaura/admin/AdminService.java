@@ -1,11 +1,11 @@
 package com.bakeaura.admin;
 
-import com.bakeaura.category.CategoryRepository;
+import com.bakeaura.category.CategoryService;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.order.OrderRepository;
-import com.bakeaura.payment.PaymentRepository;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.order.OrderService;
+import com.bakeaura.payment.PaymentService;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserDto;
 import com.bakeaura.user.UserRepository;
@@ -21,18 +21,18 @@ import java.util.List;
 public class AdminService {
     private final UserRepository userRepository;
     private final UserService userService;
-    private final ProductRepository productRepository;
-    private final OrderRepository orderRepository;
-    private final PaymentRepository paymentRepository;
-    private final CategoryRepository categoryRepository;
+    private final ProductService productService;
+    private final OrderService orderService;
+    private final PaymentService paymentService;
+    private final CategoryService categoryService;
 
     public AdminDashboardDto dashboard() {
         return new AdminDashboardDto(
                 userRepository.count(),
-                productRepository.count(),
-                orderRepository.count(),
-                paymentRepository.count(),
-                categoryRepository.count()
+                productService.countProducts(),
+                orderService.countOrders(),
+                paymentService.countPayments(),
+                categoryService.countCategories()
         );
     }
 

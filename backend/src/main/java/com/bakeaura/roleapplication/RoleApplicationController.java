@@ -22,15 +22,16 @@ public class RoleApplicationController {
             @Valid @RequestBody RoleApplicationRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Application submitted",
-                roleApplicationService.apply(authentication.getName(), request)
+                roleApplicationService.apply(Long.parseLong(authentication.getName()), request)
         ));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<RoleApplicationResponse>>> myApplications(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<RoleApplicationResponse>>> myApplications(
+            Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Applications fetched",
-                roleApplicationService.getMyApplications(authentication.getName())
+                roleApplicationService.getMyApplications(Long.parseLong(authentication.getName()))
         ));
     }
 }
