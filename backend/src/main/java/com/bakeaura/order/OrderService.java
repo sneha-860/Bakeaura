@@ -4,6 +4,8 @@ import com.bakeaura.map.MapService;
 import com.bakeaura.cart.CartDto;
 import com.bakeaura.cart.CartItemDto;
 import com.bakeaura.cart.CartService;
+import com.bakeaura.notification.EmailService;
+import com.bakeaura.notification.SmsService;
 import com.bakeaura.notification.NotificationService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
@@ -25,6 +27,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -42,6 +45,8 @@ public class OrderService {
     private final NotificationService notificationService;
     private final OrderTrackingService orderTrackingService;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailService emailService;
+    private final SmsService smsService;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, String customerEmail) {
@@ -178,6 +183,31 @@ public class OrderService {
                     order.getDeliveryLatitude(), order.getDeliveryLongitude()
             );
             order.setEstimatedDeliveryMinutes(eta);
+
+            emailService.sendOrderConfirmationEmail(
+                    order.getCustomer().getEmail(),
+                    String.valueOf(order.getId()),
+                    order.getSeller().getName()
+            );
+
+            smsService.sendOrderConfirmedSms(
+                    order.getCustomer().getPhone(),
+                    String.valueOf(order.getId())
+            );
+        }
+
+        if (newStatus == OrderStatus.DELIVERED) {
+            emailService.sendOrderDeliveredEmail(
+                    order.getCustomer().getEmail(),
+                    String.valueOf(order.getId())
+            );
+        }
+
+        if (newStatus == OrderStatus.OUT_FOR_DELIVERY) {
+            smsService.sendOutForDeliverySms(
+                    order.getCustomer().getPhone(),
+                    String.valueOf(order.getId())
+            );
         }
 
         Order updated = orderRepository.save(order);
