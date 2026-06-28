@@ -7,17 +7,16 @@ import com.bakeaura.cart.CartService;
 import com.bakeaura.notification.NotificationService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
-import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.OrderType;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.payment.PaymentService;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -39,11 +38,10 @@ public class OrderService {
     private final ProductService productService;
     private final UserRepository userRepository;
     private final MapService mapService;
-    private final PaymentService paymentService;
-    private final ReferralOrderService referralOrderService;
-    private final OrderTrackingService orderTrackingService;
     private final CartService cartService;
     private final NotificationService notificationService;
+    private final OrderTrackingService orderTrackingService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, String customerEmail) {
@@ -120,19 +118,8 @@ public class OrderService {
         order.setTotalAmount(total);
         Order saved = orderRepository.save(order);
 
-        String razorpayOrderId = paymentService.createRazorpayOrder(total, saved.getId());
-        saved.setRazorpayOrderId(razorpayOrderId);
-        paymentService.createPendingPayment(saved, razorpayOrderId);
-
-        if (request.getReferralCode() != null && !request.getReferralCode().isBlank()) {
-            referralOrderService.processReferral(saved.getId(), request.getReferralCode(), total);
-        }
-
-        notificationService.notifyUser(
-                seller.getEmail(),
-                "ORDER_CREATED",
-                "New order #" + saved.getId() + " has been placed.",
-                saved.getId()
+        eventPublisher.publishEvent(
+                new OrderCreatedEvent(this, saved, customerEmail, request.getReferralCode())
         );
 
         return toResponse(orderRepository.save(saved));
@@ -158,9 +145,7 @@ public class OrderService {
                 .map(this::toOrderItemRequest)
                 .toList());
 
-        OrderResponseDto response = createOrder(orderRequest, customerEmail);
-        cartService.clearCart(customerEmail);
-        return response;
+        return createOrder(orderRequest, customerEmail);
     }
 
     @Transactional

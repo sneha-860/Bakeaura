@@ -1,13 +1,14 @@
 package com.bakeaura.cart;
 
-
 import com.bakeaura.exception.BadRequestException;
+import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductRepository;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -32,7 +33,6 @@ public class CartService {
 
     public CartDto getCart(String userEmail) {
         User user = getUserByEmail(userEmail);
-
         return getCartForUser(user);
     }
 
@@ -63,7 +63,6 @@ public class CartService {
 
         CartDto cart = getCartForUser(user);
 
-        // If product already in cart, increment quantity
         Optional<CartItemDto> existing = cart.getItems().stream()
                 .filter(i -> i.getProductId().equals(productId))
                 .findFirst();
@@ -123,6 +122,11 @@ public class CartService {
     public void clearCart(String userEmail) {
         User user = getUserByEmail(userEmail);
         redisTemplate.delete(cartKey(user.getId()));
+    }
+
+    @EventListener
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        clearCart(event.getCustomerEmail());
     }
 
     private void saveCart(User user, CartDto cart) {

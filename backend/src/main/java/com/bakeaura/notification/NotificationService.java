@@ -1,9 +1,11 @@
 package com.bakeaura.notification;
 
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,8 +14,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +49,18 @@ public class NotificationService {
             notification.setRead(true);
             notificationRepository.save(notification);
         });
+    }
+
+    @EventListener
+    @Transactional
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        com.bakeaura.order.Order order = event.getOrder();
+        notifyUser(
+                order.getSeller().getId(),
+                "ORDER_CREATED",
+                "New order #" + order.getId() + " has been placed.",
+                order.getId()
+        );
     }
 
     @Transactional

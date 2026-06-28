@@ -1,6 +1,7 @@
 package com.bakeaura.payment;
 
 import com.bakeaura.order.Order;
+import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.order.OrderItem;
 import com.bakeaura.payment.Payment;
 import com.bakeaura.enums.OrderStatus;
@@ -19,6 +20,7 @@ import com.razorpay.RazorpayException;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,7 +69,16 @@ public class PaymentService {
         this.notificationService = notificationService;
     }
 
-    // Called by OrderService when creating an order
+    @EventListener
+    @Transactional
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        Order order = event.getOrder();
+        String razorpayOrderId = createRazorpayOrder(order.getTotalAmount(), order.getId());
+        order.setRazorpayOrderId(razorpayOrderId);
+        orderRepository.save(order);
+        createPendingPayment(order, razorpayOrderId);
+    }
+
     @Transactional
     public String createRazorpayOrder(BigDecimal amount, Long internalOrderId) {
         try {
@@ -158,16 +169,13 @@ public class PaymentService {
         return toResponse(payment);
     }
 
-    // Called by the webhook controller when Razorpay notifies us of a payment
     @Transactional
     public void handleWebhook(String payload, String razorpaySignature) {
 
-        // Step 1: Verify the webhook signature
         if (!verifyWebhookSignature(payload, razorpaySignature)) {
             throw new BadRequestException("Invalid webhook signature");
         }
 
-        // Step 2: Parse the JSON payload
         JSONObject event = new JSONObject(payload);
         String eventType = event.getString("event");
 
@@ -193,7 +201,6 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId)
                 .orElseGet(() -> {
-                    // Payment record might not exist yet if webhook arrives before our save
                     Order order = orderRepository.findByRazorpayOrderId(razorpayOrderId)
                             .orElseThrow(() -> new ResourceNotFoundException("Order not found for razorpay_order_id: " + razorpayOrderId));
                     return Payment.builder()
@@ -215,13 +222,11 @@ public class PaymentService {
         payment.setPaidAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        // Auto-confirm the order
         Order order = payment.getOrder();
         reduceStock(order);
         order.setStatus(OrderStatus.CONFIRMED);
         orderRepository.save(order);
 
-        // Broadcast the status change via WebSocket
         orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
         notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED", "Payment captured for order #" + order.getId(), order.getId());
 
@@ -265,7 +270,6 @@ public class PaymentService {
             payment.setStatus(PaymentStatus.FAILED);
             paymentRepository.save(payment);
 
-            // Cancel the order
             Order order = payment.getOrder();
             order.setStatus(OrderStatus.CANCELLED);
             orderRepository.save(order);
@@ -275,7 +279,6 @@ public class PaymentService {
         });
     }
 
-    // ---- HMAC-SHA256 signature verification ----
     private boolean verifyWebhookSignature(String payload, String signature) {
         return verifySignature(payload, signature, webhookSecret);
     }
@@ -293,7 +296,6 @@ public class PaymentService {
 
             byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
 
-            // Convert bytes to hex string
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);

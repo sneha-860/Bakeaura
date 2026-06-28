@@ -1,9 +1,11 @@
 package com.bakeaura.websocket;
 
+import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.websocket.OrderStatusMessageDto;
 import com.bakeaura.enums.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,8 +16,12 @@ import java.time.LocalDateTime;
 @Slf4j
 public class OrderTrackingService {
 
-    // SimpMessagingTemplate is the Spring abstraction for sending messages to WebSocket destinations
     private final SimpMessagingTemplate messagingTemplate;
+
+    @EventListener
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        broadcastStatusUpdate(event.getOrder().getId(), OrderStatus.PENDING);
+    }
 
     public void broadcastStatusUpdate(Long orderId, OrderStatus newStatus) {
 
