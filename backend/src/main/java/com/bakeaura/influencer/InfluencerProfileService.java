@@ -1,18 +1,48 @@
 package com.bakeaura.influencer;
 
+import com.bakeaura.enums.Role;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
+import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class InfluencerProfileService {
 
     private final InfluencerProfileRepository influencerProfileRepository;
+    private final UserRepository userRepository;
+
+    public List<InfluencerPublicDto> getInfluencers() {
+        return userRepository.findByRoleAndIsActiveTrue(Role.INFLUENCER).stream()
+                .map(this::toPublicDto)
+                .toList();
+    }
+
+    public InfluencerPublicDto getInfluencer(Long id) {
+        User influencer = userRepository.findById(id)
+                .filter(user -> user.getRole() == Role.INFLUENCER)
+                .orElseThrow(() -> new ResourceNotFoundException("Influencer not found"));
+        return toPublicDto(influencer);
+    }
+
+    private InfluencerPublicDto toPublicDto(User user) {
+        InfluencerProfile profile = influencerProfileRepository.findByUserId(user.getId()).orElse(null);
+        return InfluencerPublicDto.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .niche(profile != null ? profile.getNiche() : null)
+                .instagramUrl(profile != null ? profile.getInstagramUrl() : null)
+                .youtubeUrl(profile != null ? profile.getYoutubeUrl() : null)
+                .followerCount(profile != null ? profile.getFollowerCount() : null)
+                .build();
+    }
 
     public void createProfileForNewInfluencer(User user) {
         if (influencerProfileRepository.existsByUserId(user.getId())) {

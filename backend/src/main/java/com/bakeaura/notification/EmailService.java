@@ -23,10 +23,13 @@ public class EmailService {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
     @Async
     public void sendVerificationEmail(String toEmail,String token ){
         String subject = "Verify your Bakeaura Account ";
-        String verificationLink = baseUrl+ "/api/auth/verify-email?token=" + token;
+        String verificationLink = frontendUrl + "/verify-email?token=" + token;
         String body = "<h2> Welcome to Bakeaura! </h2>" +"<p>Click the link below to verify you email Address. </p>"+
                 "<a href='" + verificationLink + "'>Verify Email</a>"+
                 "<p> This link Expires in 24 hours. </p>";
@@ -55,7 +58,7 @@ public class EmailService {
     @Async
     public void sendEmailChangeVerification(String toEmail, String token) {
         String subject = "Confirm your new email - Bakeaura";
-        String verificationLink = baseUrl + "/api/auth/verify-email-change?token=" + token;
+        String verificationLink = frontendUrl + "/verify-email-change?token=" + token;
         String body = "<h2>Confirm your new email address</h2>"
                 + "<p>Click the link below to confirm this email address for your Bakeaura account.</p>"
                 + "<a href='" + verificationLink + "'>Confirm Email Change</a>"

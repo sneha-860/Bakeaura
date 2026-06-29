@@ -21,6 +21,7 @@ import { titleCase } from '../utils/format';
 
 const profileSchema = z.object({ name: z.string().min(2), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
+const emailSchema = z.object({ newEmail: z.string().email(), currentPassword: z.string().min(6) });
 const addressSchema = z.object({ 
   label: z.string().min(1).max(100), 
   addressLine: z.string().min(1).max(1000), 
@@ -35,6 +36,7 @@ export function ProfilePage() {
   const [applications, setApplications] = useState([]);
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
+  const emailForm = useForm({ resolver: zodResolver(emailSchema) });
 
   useEffect(() => {
     usersApi.me().then((me) => {
@@ -66,6 +68,16 @@ export function ProfilePage() {
     }
   }
 
+  async function requestEmailChange(values) {
+    try {
+      await usersApi.requestEmailChange(values);
+      emailForm.reset();
+      toast.success('Verification email sent to your new address');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not request email change');
+    }
+  }
+
   const hasPendingApplication = applications.some((a) => a.status === 'PENDING');
 
   return (
@@ -83,6 +95,13 @@ export function ProfilePage() {
           <Input label="Current password" type="password" error={passwordForm.formState.errors.currentPassword?.message} {...passwordForm.register('currentPassword')} />
           <Input label="New password" type="password" error={passwordForm.formState.errors.newPassword?.message} {...passwordForm.register('newPassword')} />
           <Button variant="ghost">Update password</Button>
+        </form>
+        <form className="form-card" onSubmit={emailForm.handleSubmit(requestEmailChange)}>
+          <h2>Change email</h2>
+          <p className="muted">We'll send a verification link to your new address — your login email won't change until you confirm it.</p>
+          <Input label="New email" type="email" error={emailForm.formState.errors.newEmail?.message} {...emailForm.register('newEmail')} />
+          <Input label="Current password" type="password" error={emailForm.formState.errors.currentPassword?.message} {...emailForm.register('currentPassword')} />
+          <Button variant="ghost">Send verification email</Button>
         </form>
       </section>
       <aside className="summary-panel">

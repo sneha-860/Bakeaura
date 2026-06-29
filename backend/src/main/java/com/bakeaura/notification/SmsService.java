@@ -15,7 +15,7 @@ public class SmsService {
 
     private final RestTemplate restTemplate;
 
-    @Value("${fast2sms.api-key}")
+    @Value("${fast2sms.api-key:disabled}")
     private String apiKey;
 
     @Async

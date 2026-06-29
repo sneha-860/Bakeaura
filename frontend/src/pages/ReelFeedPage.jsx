@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import api from "../api/axios";
+import { reelsApi } from "../api/reels";
+import { unwrapPage } from "../utils/format";
 import { Play, Pause, Heart, MessageCircle, Bookmark, Share2, User, Clock } from "lucide-react";
 
 export default function ReelFeedPage() {
@@ -18,8 +19,8 @@ export default function ReelFeedPage() {
   const fetchReels = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/api/reels/feed?page=0&size=20");
-      setReels(response.data || []);
+      const page = await reelsApi.feed(0, 20);
+      setReels(unwrapPage(page).items);
     } catch (err) {
       setError("Failed to load reels. Please try again.");
       console.error(err);

@@ -1,8 +1,8 @@
-import { Eye, EyeOff, Store, UserPlus, WandSparkles } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, Eye, EyeOff, Store, UserPlus, WandSparkles, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { authApi } from '../api/auth';
@@ -106,6 +106,75 @@ export function RegisterPage() {
         <p className="muted center">Already registered? <Link to="/login">Login</Link></p>
       </form>
     </AuthShell>
+  );
+}
+
+function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel }) {
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState('verifying');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (!token) {
+      setStatus('error');
+      setMessage('This link is missing its verification token.');
+      return;
+    }
+    verifyFn(token)
+      .then(() => setStatus('success'))
+      .catch((error) => {
+        setStatus('error');
+        setMessage(error?.response?.data?.message || 'This link is invalid or has expired.');
+      });
+  }, [searchParams]);
+
+  return (
+    <AuthShell title={title} subtitle={subtitle}>
+      <div className="form-card center">
+        {status === 'verifying' ? <p>Verifying…</p> : null}
+        {status === 'success' ? (
+          <>
+            <CheckCircle2 size={40} />
+            <p>{successMessage}</p>
+            <Link className="btn btn-primary" to={successTo}>{successLabel}</Link>
+          </>
+        ) : null}
+        {status === 'error' ? (
+          <>
+            <XCircle size={40} />
+            <p className="field-error">{message}</p>
+            <Link className="btn btn-ghost" to="/">Back to home</Link>
+          </>
+        ) : null}
+      </div>
+    </AuthShell>
+  );
+}
+
+export function VerifyEmailPage() {
+  return (
+    <VerificationLanding
+      title="Email verification"
+      subtitle="Confirming your email address."
+      verifyFn={authApi.verifyEmail}
+      successMessage="Your email is verified."
+      successTo="/"
+      successLabel="Go to Bakeaura"
+    />
+  );
+}
+
+export function VerifyEmailChangePage() {
+  return (
+    <VerificationLanding
+      title="Confirm new email"
+      subtitle="Confirming your updated email address."
+      verifyFn={authApi.verifyEmailChange}
+      successMessage="Your email has been updated. Please log in again with your new email."
+      successTo="/login"
+      successLabel="Go to login"
+    />
   );
 }
 

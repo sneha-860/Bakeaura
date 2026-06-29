@@ -3,7 +3,7 @@ import AppLayout from './components/AppLayout';
 import RequireAuth from './components/RequireAuth';
 import { Role } from './api/enums';
 import HomePage from './pages/HomePage';
-import { LoginPage, RegisterPage } from './pages/AuthPages';
+import { LoginPage, RegisterPage, VerifyEmailChangePage, VerifyEmailPage } from './pages/AuthPages';
 import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import { CartPage, CheckoutPage } from './pages/CartCheckoutPages';
@@ -21,6 +21,8 @@ const router = createBrowserRouter([
       { path: '/', element: <HomePage /> },
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },
+      { path: '/verify-email', element: <VerifyEmailPage /> },
+      { path: '/verify-email-change', element: <VerifyEmailChangePage /> },
       { path: '/products', element: <ProductsPage /> },
       { path: '/products/:id', element: <ProductDetailPage /> },
       { path: '/sellers', element: <SellersPage /> },
@@ -57,10 +59,11 @@ const router = createBrowserRouter([
       },
       {
         element: <RequireAuth allowedRoles={[Role.INFLUENCER]} />,
-        children: [
-          { path: '/influencer', element: <InfluencerDashboardPage /> },
-          { path: '/reels/upload', element: <ReelUploadPage /> }
-        ]
+        children: [{ path: '/influencer', element: <InfluencerDashboardPage /> }]
+      },
+      {
+        element: <RequireAuth allowedRoles={[Role.SELLER, Role.INFLUENCER]} />,
+        children: [{ path: '/reels/upload', element: <ReelUploadPage /> }]
       },
       {
         element: <RequireAuth allowedRoles={[Role.ADMIN]} />,
@@ -69,10 +72,6 @@ const router = createBrowserRouter([
           { path: '/admin/users', element: <AdminUsersPage /> },
           { path: '/admin/applications', element: <AdminApplicationsPage /> }
         ]
-      },
-      {
-        element: <RequireAuth allowedRoles={[Role.INFLUENCER]} />,
-        children: [{ path: '/influencer', element: <InfluencerDashboardPage /> }]
       }
     ]
   }

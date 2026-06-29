@@ -9,7 +9,7 @@ COPY pom.xml .
 # Download dependencies first (Docker caches this layer — faster rebuilds)
 RUN mvn dependency:go-offline
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN mvn clean package -DskipTests -Dmaven.test.skip=true
 # -DskipTests: don't run tests during build (saves time)
 
 # Stage 2: Run — only the final .jar, no Maven needed

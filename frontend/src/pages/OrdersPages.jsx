@@ -1,19 +1,27 @@
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Link, useParams } from 'react-router-dom';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { OrderStatus, Role } from '../api/enums';
 import { ordersApi } from '../api/orders';
 import { paymentsApi } from '../api/payments';
+import { productsApi } from '../api/products';
+import { reviewsApi } from '../api/reviews';
 import { createSocketClient } from '../api/websocket';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
+import Input from '../components/Input';
 import OrderStatusBadge from '../components/OrderStatusBadge';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
+import RatingStars from '../components/RatingStars';
 import { useAuthStore } from '../store/useAuthStore';
 import { currency, formatDate, titleCase } from '../utils/format';
 
 const statuses = Object.values(OrderStatus);
+const reviewSchema = z.object({ rating: z.coerce.number().min(1).max(5), comment: z.string().min(3) });
 
 export function MyOrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -49,6 +57,9 @@ export function OrderDetailPage() {
   const { role } = useAuthStore();
   const [order, setOrder] = useState(null);
   const [payment, setPayment] = useState(null);
+  const [myReview, setMyReview] = useState(null);
+  const [reviewChecked, setReviewChecked] = useState(false);
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(reviewSchema), defaultValues: { rating: 5, comment: '' } });
 
   useEffect(() => {
     ordersApi.get(id).then(setOrder).catch(() => setOrder(null));
@@ -65,6 +76,21 @@ export function OrderDetailPage() {
     return () => client.deactivate();
   }, [id]);
 
+  useEffect(() => {
+    if (!order || order.status !== OrderStatus.DELIVERED || role !== Role.CUSTOMER) return;
+    const firstItem = order.items?.[0];
+    if (!firstItem) return;
+    let mounted = true;
+    productsApi.get(firstItem.productId)
+      .then((product) => reviewsApi.sellerReviews(product.sellerId))
+      .then((reviews) => {
+        if (!mounted) return;
+        setMyReview((reviews || []).find((review) => review.orderId === order.id) || null);
+      })
+      .finally(() => mounted && setReviewChecked(true));
+    return () => { mounted = false; };
+  }, [order, role]);
+
   async function updateStatus(status) {
     try {
       setOrder(await ordersApi.updateStatus(id, status));
@@ -76,6 +102,26 @@ export function OrderDetailPage() {
 
   async function cancel() {
     setOrder(await ordersApi.cancel(id));
+  }
+
+  async function submitReview(values) {
+    try {
+      setMyReview(await reviewsApi.create(order.id, values));
+      reset();
+      toast.success('Review saved');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not save review');
+    }
+  }
+
+  async function removeReview() {
+    try {
+      await reviewsApi.remove(order.id);
+      setMyReview(null);
+      toast.success('Review removed');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not remove review');
+    }
   }
 
   if (!order) return <div className="page"><EmptyState title="Order not found" /></div>;
@@ -90,6 +136,24 @@ export function OrderDetailPage() {
         <div className="stack">{order.items?.map((item) => <article className="order-item" key={item.productId}><strong>{item.productName}</strong><span>{item.quantity} x {currency(item.priceAtPurchase)}</span><strong>{currency(item.subtotal)}</strong></article>)}</div>
         <p className="muted">Delivery: {order.deliveryAddress}</p>
         {role === Role.CUSTOMER && [OrderStatus.PENDING, OrderStatus.CONFIRMED].includes(order.status) ? <Button variant="ghost" onClick={cancel}><XCircle size={16} /> Cancel order</Button> : null}
+        {role === Role.CUSTOMER && order.status === OrderStatus.DELIVERED && reviewChecked ? (
+          <div className="panel">
+            <h2>Rate this order</h2>
+            {myReview ? (
+              <>
+                <RatingStars value={myReview.rating} />
+                <p>{myReview.comment}</p>
+                <Button variant="ghost" onClick={removeReview}>Remove review</Button>
+              </>
+            ) : (
+              <form className="form-card slim" onSubmit={handleSubmit(submitReview)}>
+                <Input label="Rating (1-5)" type="number" min="1" max="5" error={errors.rating?.message} {...register('rating')} />
+                <Input label="Comment" as="textarea" rows="3" error={errors.comment?.message} {...register('comment')} />
+                <Button>Submit review</Button>
+              </form>
+            )}
+          </div>
+        ) : null}
       </section>
       <aside className="summary-panel">
         <h2>{currency(order.totalAmount)}</h2>

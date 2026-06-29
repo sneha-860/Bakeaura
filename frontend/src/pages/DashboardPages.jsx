@@ -11,6 +11,7 @@ import { ApplicationStatus, OrderStatus, Role } from '../api/enums';
 import { ordersApi } from '../api/orders';
 import { productsApi } from '../api/products';
 import { roleApplicationsApi } from '../api/roleApplications';
+import { sellersApi } from '../api/sellers';
 import { usersApi } from '../api/users';
 import { useAuthStore } from '../store/useAuthStore';
 import Button from '../components/Button';
@@ -31,19 +32,96 @@ const productSchema = z.object({
   imageUrl: z.string().url().or(z.literal('')).optional()
 });
 
+const shopProfileSchema = z.object({
+  shopName: z.string().max(150),
+  shopBio: z.string().max(1000),
+  deliveryRadiusKm: z.string(),
+  bannerImageUrl: z.string().url().or(z.literal(''))
+});
+
 export function SellerDashboardPage() {
   const [me, setMe] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [shopProfile, setShopProfile] = useState(null);
+  const shopForm = useForm({ resolver: zodResolver(shopProfileSchema) });
+
+  function loadShopProfile(sellerId) {
+    sellersApi.get(sellerId).then((profile) => {
+      setShopProfile(profile);
+      shopForm.reset({
+        shopName: profile.shopName || '',
+        shopBio: profile.shopBio || '',
+        deliveryRadiusKm: profile.deliveryRadiusKm ?? '',
+        bannerImageUrl: profile.bannerImageUrl || ''
+      });
+    }).catch(() => setShopProfile(null));
+  }
+
   useEffect(() => {
     usersApi.me().then((user) => {
       setMe(user);
       productsApi.bySeller(user.id).then(setProducts).catch(() => setProducts([]));
+      loadShopProfile(user.id);
     });
     ordersApi.sellerOrders().then(setOrders).catch(() => setOrders([]));
   }, []);
+
+  async function saveShopProfile(values) {
+    try {
+      await sellersApi.updateProfile({
+        shopName: values.shopName,
+        shopBio: values.shopBio,
+        deliveryRadiusKm: values.deliveryRadiusKm === '' ? null : Number(values.deliveryRadiusKm),
+        bannerImageUrl: values.bannerImageUrl
+      });
+      toast.success('Shop profile updated');
+      loadShopProfile(me.id);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not update shop profile');
+    }
+  }
+
+  async function toggleShopOpen() {
+    try {
+      const updated = await sellersApi.toggleOpen();
+      setShopProfile(updated);
+      toast.success(updated.isOpen ? 'Shop is now open' : 'Shop is now closed');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not update shop status');
+    }
+  }
+
   const gross = orders.filter((order) => order.status !== OrderStatus.CANCELLED).reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Seller Studio</p><h1>{me?.name || 'Seller dashboard'}</h1></section><Stats cards={[['Products', products.length, <Package />], ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />], ['Gross order value', currency(gross), <Users />]]} /><section className="section"><h2>Recent orders</h2><OrderList orders={orders.slice(0, 5)} /></section></div>;
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero">
+        <p className="eyebrow">Seller Studio</p>
+        <h1>{me?.name || 'Seller dashboard'}</h1>
+        {shopProfile ? (
+          <div className="hero-actions">
+            <span className={`pill ${shopProfile.isOpen ? 'success' : 'danger'}`}>{shopProfile.isOpen ? 'Shop open' : 'Shop closed'}</span>
+            <Button variant="ghost" onClick={toggleShopOpen}>{shopProfile.isOpen ? 'Close shop' : 'Open shop'}</Button>
+          </div>
+        ) : null}
+      </section>
+      <Stats cards={[['Products', products.length, <Package />], ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />], ['Gross order value', currency(gross), <Users />]]} />
+      <section className="section two-column">
+        <div>
+          <h2>Recent orders</h2>
+          <OrderList orders={orders.slice(0, 5)} />
+        </div>
+        <form className="form-card" onSubmit={shopForm.handleSubmit(saveShopProfile)}>
+          <h2>Shop profile</h2>
+          <Input label="Shop name" error={shopForm.formState.errors.shopName?.message} {...shopForm.register('shopName')} />
+          <Input label="Shop bio" as="textarea" rows="4" error={shopForm.formState.errors.shopBio?.message} {...shopForm.register('shopBio')} />
+          <Input label="Delivery radius (km)" type="number" step="0.1" error={shopForm.formState.errors.deliveryRadiusKm?.message} {...shopForm.register('deliveryRadiusKm')} />
+          <Input label="Banner image URL" error={shopForm.formState.errors.bannerImageUrl?.message} {...shopForm.register('bannerImageUrl')} />
+          <Button>Save shop profile</Button>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 export function MyProductsPage() {

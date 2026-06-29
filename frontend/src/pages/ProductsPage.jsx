@@ -38,7 +38,8 @@ export default function ProductsPage() {
     const page = unwrapPage(payload);
     setProducts(page.items);
     setTotalPages(page.totalPages);
-    const pairs = await Promise.all(page.items.map((product) => reviewsApi.summary(product.id).then((summary) => [product.id, summary]).catch(() => [product.id, null])));
+    const sellerIds = [...new Set(page.items.map((product) => product.sellerId).filter(Boolean))];
+    const pairs = await Promise.all(sellerIds.map((sellerId) => reviewsApi.sellerSummary(sellerId).then((summary) => [sellerId, summary]).catch(() => [sellerId, null])));
     setSummaries(Object.fromEntries(pairs));
     setLoading(false);
   }
@@ -66,7 +67,7 @@ export default function ProductsPage() {
         <label className="field"><span>Sort</span><select className="input" value={filters.sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value })}><option value="createdAt,desc">Newest</option><option value="price,asc">Price low</option><option value="price,desc">Price high</option><option value="name,asc">Name</option></select></label>
         <Button>Apply</Button>
       </form>
-      {loading ? <SkeletonCard count={8} /> : products.length ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} summary={summaries[product.id]} />)}</div> : <EmptyState title="No products found" />}
+      {loading ? <SkeletonCard count={8} /> : products.length ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} summary={summaries[product.sellerId]} />)}</div> : <EmptyState title="No products found" />}
       <div className="pagination">
         <Button variant="ghost" disabled={filters.page <= 0} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous</Button>
         <span>Page {filters.page + 1} of {totalPages}</span>

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
-import { Client } from "@stomp/stompjs";
-import SockJS from "sockjs-client";
+import { reelsApi } from "../api/reels";
+import { createSocketClient } from "../api/websocket";
 
 export default function ReelUploadPage() {
   const [videoFile, setVideoFile] = useState(null);
@@ -41,24 +40,21 @@ export default function ReelUploadPage() {
   };
 
   const connectWebSocket = (reelId, sellerId) => {
-    const socket = new SockJS("http://localhost:8080/ws");
-    const client = new Client({
-      webSocketFactory: () => socket,
-      onConnect: () => {
-        client.subscribe(`/topic/reels/${sellerId}`, (message) => {
-          const updatedReel = JSON.parse(message.body);
-          if (updatedReel.id === reelId) {
-            if (updatedReel.status === "ACTIVE") {
-              setUploadState("done");
-            } else if (updatedReel.status === "FAILED") {
-              setUploadState("error");
-              setErrorMsg("Video processing failed. Please try again.");
-            }
-            client.deactivate();
+    const client = createSocketClient();
+    client.onConnect = () => {
+      client.subscribe(`/topic/reels/${sellerId}`, (message) => {
+        const updatedReel = JSON.parse(message.body);
+        if (updatedReel.id === reelId) {
+          if (updatedReel.status === "ACTIVE") {
+            setUploadState("done");
+          } else if (updatedReel.status === "FAILED") {
+            setUploadState("error");
+            setErrorMsg("Video processing failed. Please try again.");
           }
-        });
-      },
-    });
+          client.deactivate();
+        }
+      });
+    };
     client.activate();
     stompClientRef.current = client;
   };
@@ -77,15 +73,11 @@ export default function ReelUploadPage() {
     formData.append("caption", caption.trim());
 
     try {
-      const response = await api.post("/api/reels/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        onUploadProgress: (progressEvent) => {
-          const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setProgress(pct);
-        },
+      const reel = await reelsApi.upload(formData, (progressEvent) => {
+        const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setProgress(pct);
       });
 
-      const reel = response.data;
       setReelId(reel.id);
       setUploadState("processing");
 

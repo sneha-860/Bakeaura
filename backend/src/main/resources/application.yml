@@ -16,6 +16,8 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        jdbc:
+          time_zone: UTC
 
   data:
     redis:
@@ -68,6 +70,7 @@ fast2sms:
 
 app:
   base-url: http://localhost:8080
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   delivery:
