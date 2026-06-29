@@ -7,12 +7,17 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { adminApi } from '../api/admin';
 import { categoriesApi } from '../api/categories';
-import { ApplicationStatus, OrderStatus, Role } from '../api/enums';
+import { collaborationsApi } from '../api/collaborations';
+import { customOrdersApi } from '../api/customOrders';
+import { ApplicationStatus, CollaborationStatus, CustomOrderStatus, OrderStatus, PayoutStatus, Role } from '../api/enums';
+import { influencersApi } from '../api/influencers';
 import { ordersApi } from '../api/orders';
+import { payoutsApi } from '../api/payouts';
 import { productsApi } from '../api/products';
 import { roleApplicationsApi } from '../api/roleApplications';
 import { sellersApi } from '../api/sellers';
 import { usersApi } from '../api/users';
+import { walletApi } from '../api/wallet';
 import { useAuthStore } from '../store/useAuthStore';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
@@ -21,7 +26,7 @@ import Modal from '../components/Modal';
 import OrderStatusBadge from '../components/OrderStatusBadge';
 import ProductCard from '../components/ProductCard';
 import { OrderList } from './OrdersPages';
-import { currency, titleCase } from '../utils/format';
+import { currency, formatDate, titleCase } from '../utils/format';
 
 const productSchema = z.object({
   name: z.string().min(2),
@@ -30,6 +35,11 @@ const productSchema = z.object({
   stockQuantity: z.coerce.number().int().min(0),
   categoryId: z.coerce.number().positive(),
   imageUrl: z.string().url().or(z.literal('')).optional()
+});
+
+const payoutSchema = z.object({
+  amount: z.coerce.number().positive(),
+  upiId: z.string().min(3).max(100)
 });
 
 const shopProfileSchema = z.object({
@@ -173,6 +183,85 @@ export function IncomingOrdersPage() {
     load();
   }
   return <div className="page"><section className="section-head"><div><p className="eyebrow">Seller orders</p><h1>Incoming orders</h1></div></section><div className="tabs"><button className={!status ? 'active' : ''} onClick={() => setStatus('')}>All</button>{Object.values(OrderStatus).map((item) => <button key={item} className={status === item ? 'active' : ''} onClick={() => setStatus(item)}>{titleCase(item)}</button>)}</div><div className="stack">{orders.map((order) => <article className="order-card" key={order.id}><div><h3>Order #{order.id}</h3><p>{order.customerName}</p></div><OrderStatusBadge status={order.status} /><strong>{currency(order.totalAmount)}</strong><select className="input compact-input" value={order.status} onChange={(event) => update(order.id, event.target.value)}>{Object.values(OrderStatus).map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</select></article>)}{!orders.length ? <EmptyState title="No orders found" /> : null}</div></div>;
+}
+
+export function SellerCustomOrdersPage() {
+  const [status, setStatus] = useState('');
+  const [requests, setRequests] = useState([]);
+  const [quoting, setQuoting] = useState(null);
+  const [quoteAmount, setQuoteAmount] = useState('');
+
+  const load = () => customOrdersApi.sellerAll().then(setRequests).catch(() => setRequests([]));
+  useEffect(load, []);
+
+  const visible = status ? requests.filter((request) => request.status === status) : requests;
+
+  async function accept(id) {
+    try {
+      await customOrdersApi.accept(id);
+      toast.success('Request accepted');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not accept request');
+    }
+  }
+
+  async function reject(id) {
+    try {
+      await customOrdersApi.reject(id);
+      toast.success('Request rejected');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not reject request');
+    }
+  }
+
+  async function submitQuote() {
+    try {
+      await customOrdersApi.quote(quoting.id, Number(quoteAmount));
+      toast.success('Quote sent');
+      setQuoting(null);
+      setQuoteAmount('');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not send quote');
+    }
+  }
+
+  return (
+    <div className="page">
+      <section className="section-head"><div><p className="eyebrow">Seller Studio</p><h1>Custom order requests</h1></div></section>
+      <div className="tabs">
+        <button className={!status ? 'active' : ''} onClick={() => setStatus('')}>All</button>
+        {Object.values(CustomOrderStatus).map((item) => <button key={item} className={status === item ? 'active' : ''} onClick={() => setStatus(item)}>{titleCase(item)}</button>)}
+      </div>
+      <div className="stack">
+        {visible.map((request) => (
+          <article className="panel" key={request.id}>
+            <span className="pill">{titleCase(request.status)}</span>
+            <h3>{request.occasion} · serves {request.serves}</h3>
+            <p>{request.designBrief}</p>
+            <small>Budget ₹{request.budgetMin}–₹{request.budgetMax}</small>
+            {request.status === 'QUOTED' ? <p><strong>Your quote: {currency(request.sellerQuote)}</strong></p> : null}
+            {request.status === CustomOrderStatus.PENDING ? (
+              <div className="hero-actions">
+                <Button onClick={() => setQuoting(request)}>Send quote</Button>
+                <Button variant="ghost" onClick={() => accept(request.id)}>Accept</Button>
+                <Button variant="ghost" onClick={() => reject(request.id)}>Reject</Button>
+              </div>
+            ) : null}
+          </article>
+        ))}
+        {!visible.length ? <EmptyState title="No custom order requests" /> : null}
+      </div>
+      <Modal open={Boolean(quoting)} title="Send a quote" onClose={() => setQuoting(null)}>
+        <div className="form-card">
+          <Input label="Quote amount (₹)" type="number" value={quoteAmount} onChange={(event) => setQuoteAmount(event.target.value)} />
+          <Button onClick={submitQuote}>Send quote</Button>
+        </div>
+      </Modal>
+    </div>
+  );
 }
 
 export function AdminDashboardPage() {
@@ -329,11 +418,287 @@ export function AdminApplicationsPage() {
   return <div className="page"><section className="section-head"><div><p className="eyebrow">Admin</p><h1>Applications</h1></div><select className="input compact-input" value={status} onChange={(event) => setStatus(event.target.value)}>{Object.values(ApplicationStatus).map((item) => <option key={item} value={item}>{item}</option>)}</select></section>{loading ? <div className="loading-state">Loading applications...</div> : error ? <div className="error-state">{error}</div> : <><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{app.userName} wants {titleCase(app.requestedRole)}</h3><p>{app.message}</p><Button onClick={() => setSelected(app)}>Review</Button></article>)}{!applications.length ? <EmptyState title="No applications" /> : null}</div><Modal open={Boolean(selected)} title="Review application" onClose={() => setSelected(null)}><Input label="Review note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} /><div className="hero-actions"><Button onClick={() => review('approve')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Approve'}</Button><Button variant="ghost" onClick={() => review('reject')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button></div></Modal></>}</div>;
 }
 
+export function AdminPayoutsPage() {
+  const [pending, setPending] = useState([]);
+  const [approved, setApproved] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [note, setNote] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  function enrich(list) {
+    return Promise.all(list.map((item) => influencersApi.get(item.influencerId).then((influencer) => ({ ...item, influencerName: influencer.name })).catch(() => item)));
+  }
+
+  function load() {
+    setLoading(true);
+    Promise.all([
+      payoutsApi.adminPending().then(enrich).catch(() => []),
+      payoutsApi.adminApproved().then(enrich).catch(() => [])
+    ]).then(([pendingList, approvedList]) => {
+      setPending(pendingList);
+      setApproved(approvedList);
+    }).finally(() => setLoading(false));
+  }
+  useEffect(load, []);
+
+  async function approve(id) {
+    setActionLoading(true);
+    try {
+      await payoutsApi.approve(id);
+      toast.success('Payout approved');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not approve payout');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function reject() {
+    if (!note.trim()) {
+      toast.error('A rejection note is required');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await payoutsApi.reject(selected.id, note);
+      toast.success('Payout rejected');
+      setSelected(null);
+      setNote('');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not reject payout');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function markPaid(id) {
+    setActionLoading(true);
+    try {
+      await payoutsApi.markPaid(id);
+      toast.success('Payout marked as paid');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not mark payout as paid');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  return (
+    <div className="page">
+      <section className="section-head"><div><p className="eyebrow">Admin</p><h1>Payouts</h1></div></section>
+      {loading ? <div className="loading-state">Loading…</div> : (
+        <>
+          <h2>Pending</h2>
+          <div className="stack">
+            {pending.map((request) => (
+              <article className="panel" key={request.id}>
+                <span className="pill">{titleCase(request.status)}</span>
+                <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
+                <strong>{currency(request.amount)}</strong>
+                <small>to {request.upiId} · requested {formatDate(request.createdAt)}</small>
+                <div className="hero-actions">
+                  <Button onClick={() => approve(request.id)} disabled={actionLoading}>Approve</Button>
+                  <Button variant="ghost" onClick={() => setSelected(request)} disabled={actionLoading}>Reject</Button>
+                </div>
+              </article>
+            ))}
+            {!pending.length ? <EmptyState title="No pending payouts" /> : null}
+          </div>
+          <h2>Approved — awaiting payment</h2>
+          <div className="stack">
+            {approved.map((request) => (
+              <article className="panel" key={request.id}>
+                <span className="pill">{titleCase(request.status)}</span>
+                <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
+                <strong>{currency(request.amount)}</strong>
+                <small>to {request.upiId} · approved {formatDate(request.processedAt)}</small>
+                <div className="hero-actions">
+                  <Button onClick={() => markPaid(request.id)} disabled={actionLoading}>Mark as paid</Button>
+                </div>
+              </article>
+            ))}
+            {!approved.length ? <EmptyState title="Nothing awaiting payment" /> : null}
+          </div>
+        </>
+      )}
+      <Modal open={Boolean(selected)} title="Reject payout" onClose={() => setSelected(null)}>
+        <Input label="Rejection note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} />
+        <div className="hero-actions">
+          <Button variant="ghost" onClick={reject} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
 export function InfluencerDashboardPage() {
   const [me, setMe] = useState(null);
   const [applications, setApplications] = useState([]);
   useEffect(() => { usersApi.me().then(setMe); roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([])); }, []);
   return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Creator Hub</p><h1>{me?.name || 'Influencer dashboard'}</h1><p>{me?.email}</p></section><section className="section"><h2>Your applications</h2><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{titleCase(app.requestedRole)}</h3><p>{app.message}</p></article>)}{!applications.length ? <EmptyState title="No applications found" /> : null}</div></section></div>;
+}
+
+export function SellerCollaborationsPage() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    collaborationsApi.outgoing()
+      .then((list) => Promise.all(list.map((item) => influencersApi.get(item.influencerId).then((influencer) => ({ ...item, influencerName: influencer.name })).catch(() => item))))
+      .then(setRequests)
+      .catch(() => setRequests([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="page">
+      <section className="section-head"><div><p className="eyebrow">Seller Studio</p><h1>Collaboration requests</h1></div></section>
+      {loading ? <div className="loading-state">Loading…</div> : (
+        <div className="stack">
+          {requests.map((request) => (
+            <article className="panel" key={request.id}>
+              <span className="pill">{titleCase(request.status)}</span>
+              <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
+              {request.message ? <p>{request.message}</p> : null}
+              <small>Sent {formatDate(request.createdAt)}</small>
+            </article>
+          ))}
+          {!requests.length ? <EmptyState title="No collaboration requests sent yet" text="Visit a creator's profile to request a collaboration." /> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function InfluencerCollaborationsPage() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
+
+  function load() {
+    setLoading(true);
+    collaborationsApi.incoming()
+      .then((list) => Promise.all(list.map((item) => sellersApi.get(item.sellerId).then((seller) => ({ ...item, sellerName: seller.name })).catch(() => item))))
+      .then(setRequests)
+      .catch(() => setRequests([]))
+      .finally(() => setLoading(false));
+  }
+  useEffect(load, []);
+
+  async function respond(sellerId, status) {
+    setActionLoading(sellerId);
+    try {
+      await collaborationsApi.respond(sellerId, status);
+      toast.success(status === CollaborationStatus.APPROVED ? 'Collaboration approved' : 'Collaboration rejected');
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not respond to request');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  return (
+    <div className="page">
+      <section className="section-head"><div><p className="eyebrow">Creator Hub</p><h1>Collaboration requests</h1></div></section>
+      {loading ? <div className="loading-state">Loading…</div> : (
+        <div className="stack">
+          {requests.map((request) => (
+            <article className="panel" key={request.id}>
+              <span className="pill">{titleCase(request.status)}</span>
+              <h3>{request.sellerName || `Seller #${request.sellerId}`}</h3>
+              {request.message ? <p>{request.message}</p> : null}
+              <small>Received {formatDate(request.createdAt)}</small>
+              {request.status === CollaborationStatus.PENDING ? (
+                <div className="hero-actions">
+                  <Button onClick={() => respond(request.sellerId, CollaborationStatus.APPROVED)} disabled={actionLoading === request.sellerId}>Approve</Button>
+                  <Button variant="ghost" onClick={() => respond(request.sellerId, CollaborationStatus.REJECTED)} disabled={actionLoading === request.sellerId}>Reject</Button>
+                </div>
+              ) : null}
+            </article>
+          ))}
+          {!requests.length ? <EmptyState title="No collaboration requests yet" /> : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function InfluencerWalletPage() {
+  const [balance, setBalance] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [history, setHistory] = useState([]);
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(payoutSchema) });
+
+  function load() {
+    walletApi.balance().then(setBalance).catch(() => setBalance(null));
+    walletApi.transactions().then(setTransactions).catch(() => setTransactions([]));
+    payoutsApi.history().then(setHistory).catch(() => setHistory([]));
+  }
+  useEffect(load, []);
+
+  const hasPending = history.some((request) => request.status === PayoutStatus.PENDING);
+
+  async function submitPayout(values) {
+    try {
+      await payoutsApi.submit(values.amount, values.upiId);
+      toast.success('Payout request submitted');
+      reset();
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not submit payout request');
+    }
+  }
+
+  return (
+    <div className="page two-column">
+      <section>
+        <h1>Wallet</h1>
+        <div className="stats-grid">
+          <article className="stat-card"><strong>{currency(balance ?? 0)}</strong><small>Available balance</small></article>
+        </div>
+        <h2>Transaction history</h2>
+        <div className="stack">
+          {transactions.map((transaction) => (
+            <article className="order-item" key={transaction.id}>
+              <strong>{transaction.type === 'CREDIT' ? '+' : '-'}{currency(transaction.amount)}</strong>
+              <span>{transaction.description}</span>
+              <small>{formatDate(transaction.createdAt)}</small>
+            </article>
+          ))}
+          {!transactions.length ? <EmptyState title="No wallet activity yet" /> : null}
+        </div>
+        <h2>Payout history</h2>
+        <div className="stack">
+          {history.map((request) => (
+            <article className="panel" key={request.id}>
+              <span className="pill">{titleCase(request.status)}</span>
+              <strong>{currency(request.amount)}</strong>
+              <small>to {request.upiId} · requested {formatDate(request.createdAt)}</small>
+              {request.adminNote ? <p>{request.adminNote}</p> : null}
+            </article>
+          ))}
+          {!history.length ? <EmptyState title="No payout requests yet" /> : null}
+        </div>
+      </section>
+      <aside className="summary-panel">
+        <h2>Request a payout</h2>
+        {hasPending ? (
+          <p className="muted">You already have a pending payout request — wait for it to be processed before requesting another.</p>
+        ) : (
+          <form className="form-card" onSubmit={handleSubmit(submitPayout)}>
+            <Input label="Amount (₹)" type="number" step="1" error={errors.amount?.message} {...register('amount')} />
+            <Input label="UPI ID" placeholder="yourname@upi" error={errors.upiId?.message} {...register('upiId')} />
+            <Button>Request payout</Button>
+          </form>
+        )}
+      </aside>
+    </div>
+  );
 }
 
 function ProductForm({ form, categories, onSubmit, editing, onCancel }) {

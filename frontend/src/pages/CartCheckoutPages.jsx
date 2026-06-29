@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addressesApi } from '../api/addresses';
 import { cartApi } from '../api/cart';
+import { OrderType } from '../api/enums';
 import { ordersApi } from '../api/orders';
 import { paymentsApi } from '../api/payments';
 import { productsApi } from '../api/products';
@@ -86,6 +87,7 @@ export function CheckoutPage() {
   const [addresses, setAddresses] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState('');
   const [selectedAddress, setSelectedAddress] = useState(null);
+  const [referralCode, setReferralCode] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema), defaultValues: { defaultAddress: true } });
 
   useEffect(() => {
@@ -143,7 +145,9 @@ export function CheckoutPage() {
         sellerId: Number(selectedSeller),
         deliveryAddress: selectedAddress.addressLine,
         deliveryLatitude: selectedAddress.latitude,
-        deliveryLongitude: selectedAddress.longitude
+        deliveryLongitude: selectedAddress.longitude,
+        orderType: OrderType.INSTANT,
+        referralCode: referralCode.trim() || undefined
       });
       const ok = await loadRazorpay();
       if (!ok) throw new Error('Razorpay checkout could not load');
@@ -199,6 +203,7 @@ export function CheckoutPage() {
       <aside className="summary-panel">
         <h2>Payment</h2>
         <p>Razorpay checkout opens after the backend order is created.</p>
+        <Input label="Referral code (optional)" placeholder="Got a code from a creator?" value={referralCode} onChange={(event) => setReferralCode(event.target.value)} />
         <Button onClick={placeOrder}><CreditCard size={17} /> Place order and pay</Button>
       </aside>
     </div>

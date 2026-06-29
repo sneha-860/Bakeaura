@@ -88,4 +88,26 @@ public class PayoutRequestService {
     public List<PayoutRequest> getPendingRequests() {
         return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.PENDING);
     }
+
+    @Transactional(readOnly = true)
+    public List<PayoutRequest> getApprovedRequests() {
+        return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.APPROVED);
+    }
+
+    @Transactional
+    public PayoutRequest markAsPaid(Long requestId, Long adminId) {
+        PayoutRequest request = payoutRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Payout request not found: " + requestId));
+
+        if (request.getStatus() != PayoutStatus.APPROVED) {
+            throw new BadRequestException("Only APPROVED requests can be marked as paid");
+        }
+
+        request.setStatus(PayoutStatus.PAID);
+        request.setProcessedBy(adminId);
+        request.setProcessedAt(LocalDateTime.now());
+
+        return payoutRequestRepository.save(request);
+    }
 }

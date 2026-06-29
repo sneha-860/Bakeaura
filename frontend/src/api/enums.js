@@ -26,3 +26,28 @@ export const ApplicationStatus = Object.freeze({
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED'
 });
+
+export const CustomOrderStatus = Object.freeze({
+  PENDING: 'PENDING',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  QUOTED: 'QUOTED'
+});
+
+export const CollaborationStatus = Object.freeze({
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED'
+});
+
+export const OrderType = Object.freeze({
+  INSTANT: 'INSTANT',
+  SCHEDULED: 'SCHEDULED'
+});
+
+export const PayoutStatus = Object.freeze({
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  PAID: 'PAID',
+  REJECTED: 'REJECTED'
+});

@@ -40,6 +40,21 @@ public class PayoutRequestController {
         return ResponseEntity.ok(payoutRequestService.getPendingRequests());
     }
 
+    @GetMapping("/admin/payout/approved")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<PayoutRequest>> getApprovedRequests() {
+        return ResponseEntity.ok(payoutRequestService.getApprovedRequests());
+    }
+
+    @PutMapping("/admin/payout/{id}/mark-paid")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PayoutRequest> markAsPaid(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long adminId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(payoutRequestService.markAsPaid(id, adminId));
+    }
+
     @PutMapping("/admin/payout/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PayoutRequest> approveRequest(

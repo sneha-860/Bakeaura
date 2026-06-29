@@ -8,9 +8,9 @@ import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import { CartPage, CheckoutPage } from './pages/CartCheckoutPages';
 import { MyOrdersPage, OrderDetailPage } from './pages/OrdersPages';
-import { AddressesPage, FavouritesPage, NotificationsPage, ProfilePage, RoleApplicationPage } from './pages/UserPages';
+import { AddressesPage, CustomOrdersPage, FavouritesPage, NotificationsPage, ProfilePage, RoleApplicationPage } from './pages/UserPages';
 import { InfluencerProfilePage, InfluencersPage, SellerStorefrontPage, SellersPage } from './pages/DirectoryPages';
-import { AdminApplicationsPage, AdminDashboardPage, AdminUsersPage, InfluencerDashboardPage, IncomingOrdersPage, MyProductsPage, SellerDashboardPage } from './pages/DashboardPages';
+import { AdminApplicationsPage, AdminDashboardPage, AdminPayoutsPage, AdminUsersPage, InfluencerCollaborationsPage, InfluencerDashboardPage, InfluencerWalletPage, IncomingOrdersPage, MyProductsPage, SellerCollaborationsPage, SellerCustomOrdersPage, SellerDashboardPage } from './pages/DashboardPages';
 import ReelUploadPage from './pages/ReelUploadPage';
 import ReelFeedPage from './pages/ReelFeedPage';
 
@@ -35,7 +35,8 @@ const router = createBrowserRouter([
         children: [
           { path: '/cart', element: <CartPage /> },
           { path: '/checkout', element: <CheckoutPage /> },
-          { path: '/orders', element: <MyOrdersPage /> }
+          { path: '/orders', element: <MyOrdersPage /> },
+          { path: '/custom-orders', element: <CustomOrdersPage /> }
         ]
       },
       {
@@ -54,12 +55,18 @@ const router = createBrowserRouter([
         children: [
           { path: '/seller', element: <SellerDashboardPage /> },
           { path: '/seller/products', element: <MyProductsPage /> },
-          { path: '/seller/orders', element: <IncomingOrdersPage /> }
+          { path: '/seller/orders', element: <IncomingOrdersPage /> },
+          { path: '/seller/custom-orders', element: <SellerCustomOrdersPage /> },
+          { path: '/seller/collaborations', element: <SellerCollaborationsPage /> }
         ]
       },
       {
         element: <RequireAuth allowedRoles={[Role.INFLUENCER]} />,
-        children: [{ path: '/influencer', element: <InfluencerDashboardPage /> }]
+        children: [
+          { path: '/influencer', element: <InfluencerDashboardPage /> },
+          { path: '/influencer/collaborations', element: <InfluencerCollaborationsPage /> },
+          { path: '/influencer/wallet', element: <InfluencerWalletPage /> }
+        ]
       },
       {
         element: <RequireAuth allowedRoles={[Role.SELLER, Role.INFLUENCER]} />,
@@ -70,7 +77,8 @@ const router = createBrowserRouter([
         children: [
           { path: '/admin', element: <AdminDashboardPage /> },
           { path: '/admin/users', element: <AdminUsersPage /> },
-          { path: '/admin/applications', element: <AdminApplicationsPage /> }
+          { path: '/admin/applications', element: <AdminApplicationsPage /> },
+          { path: '/admin/payouts', element: <AdminPayoutsPage /> }
         ]
       }
     ]

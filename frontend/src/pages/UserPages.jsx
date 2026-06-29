@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addressesApi } from '../api/addresses';
+import { customOrdersApi } from '../api/customOrders';
 import { Role } from '../api/enums';
 import { favouritesApi } from '../api/favourites';
 import { notificationsApi } from '../api/notifications';
@@ -17,7 +18,7 @@ import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
 import NotificationItem from '../components/NotificationItem';
 import ProductCard from '../components/ProductCard';
-import { titleCase } from '../utils/format';
+import { currency, formatDate, titleCase } from '../utils/format';
 
 const profileSchema = z.object({ name: z.string().min(2), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
@@ -204,6 +205,28 @@ export function RoleApplicationPage() {
     <div className="page two-column">
       <section><h1>Role applications</h1><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{titleCase(app.requestedRole)}</h3><p>{app.message}</p>{app.reviewNote ? <small>{app.reviewNote}</small> : null}</article>)}{!applications.length ? <EmptyState title="No applications yet" /> : null}</div></section>
       <aside><form className="form-card" onSubmit={handleSubmit(submit)}><h2>Apply</h2><label className="field"><span>Requested role</span><select className="input" {...register('requestedRole')}><option value={Role.SELLER}>Seller</option><option value={Role.INFLUENCER}>Influencer</option></select></label><Input label="Message" as="textarea" rows="5" error={errors.message?.message} {...register('message')} /><Button><Send size={16} /> Submit</Button></form></aside>
+    </div>
+  );
+}
+
+export function CustomOrdersPage() {
+  const [requests, setRequests] = useState([]);
+  useEffect(() => { customOrdersApi.myRequests().then(setRequests).catch(() => setRequests([])); }, []);
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero"><p className="eyebrow">Custom cakes</p><h1>Your custom order requests</h1></section>
+      <div className="stack">
+        {requests.map((request) => (
+          <article className="panel" key={request.id}>
+            <span className="pill">{titleCase(request.status)}</span>
+            <h3>{request.occasion} · serves {request.serves}</h3>
+            <p>{request.designBrief}</p>
+            <small>Budget ₹{request.budgetMin}–₹{request.budgetMax} · requested {formatDate(request.createdAt)}</small>
+            {request.status === 'QUOTED' ? <p><strong>Seller quote: {currency(request.sellerQuote)}</strong></p> : null}
+          </article>
+        ))}
+        {!requests.length ? <EmptyState title="No custom order requests yet" text="Visit a seller's storefront to request a custom cake." /> : null}
+      </div>
     </div>
   );
 }

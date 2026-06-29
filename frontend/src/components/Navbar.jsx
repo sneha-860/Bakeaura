@@ -60,12 +60,16 @@ export default function Navbar() {
       {role === Role.SELLER ? (
         <>
           <NavLink to="/seller">Seller Studio</NavLink>
+          <NavLink to="/seller/custom-orders">Custom Requests</NavLink>
+          <NavLink to="/seller/collaborations">Collaborations</NavLink>
           <NavLink to="/reels/upload">Upload Reel</NavLink>
         </>
       ) : null}
       {role === Role.INFLUENCER ? (
         <>
           <NavLink to="/influencer">Creator Hub</NavLink>
+          <NavLink to="/influencer/collaborations">Collaborations</NavLink>
+          <NavLink to="/influencer/wallet">Wallet</NavLink>
           <NavLink to="/reels/upload">Upload Reel</NavLink>
         </>
       ) : null}
@@ -74,6 +78,7 @@ export default function Navbar() {
           <NavLink to="/admin">Dashboard</NavLink>
           <NavLink to="/admin/users">Users</NavLink>
           <NavLink to="/admin/applications">Applications</NavLink>
+          <NavLink to="/admin/payouts">Payouts</NavLink>
         </>
       ) : null}
     </>
@@ -127,6 +132,11 @@ export default function Navbar() {
                   <Link to="/addresses" onClick={() => setProfileDropdownOpen(false)}>
                     <span>Addresses</span>
                   </Link>
+                  {role === Role.CUSTOMER ? (
+                    <Link to="/custom-orders" onClick={() => setProfileDropdownOpen(false)}>
+                      <span>Custom Orders</span>
+                    </Link>
+                  ) : null}
                   {role !== Role.SELLER && role !== Role.ADMIN && !myApplications.some((a) => a.status === 'PENDING') && (
                     <button onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(false); setTimeout(() => setRoleModalOpen(true), 100); }}>
                       <span>Apply as Seller/Creator</span>
