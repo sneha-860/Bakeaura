@@ -1,6 +1,8 @@
 package com.bakeaura.customorder;
 
 import com.bakeaura.enums.CustomOrderStatus;
+import com.bakeaura.exception.BadRequestException;
+import com.bakeaura.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +28,7 @@ public class CustomOrderRequestService {
 
         if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
                 customerId, sellerId, CustomOrderStatus.PENDING)) {
-            throw new IllegalStateException(
+            throw new BadRequestException(
                     "You already have a pending request with this seller");
         }
 
@@ -47,7 +49,7 @@ public class CustomOrderRequestService {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
         if (request.getStatus() != CustomOrderStatus.PENDING) {
-            throw new IllegalStateException("Only PENDING requests can be accepted");
+            throw new BadRequestException("Only PENDING requests can be accepted");
         }
 
         request.setStatus(CustomOrderStatus.ACCEPTED);
@@ -59,7 +61,7 @@ public class CustomOrderRequestService {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
         if (request.getStatus() != CustomOrderStatus.PENDING) {
-            throw new IllegalStateException("Only PENDING requests can be rejected");
+            throw new BadRequestException("Only PENDING requests can be rejected");
         }
 
         request.setStatus(CustomOrderStatus.REJECTED);
@@ -71,7 +73,7 @@ public class CustomOrderRequestService {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
         if (request.getStatus() != CustomOrderStatus.PENDING) {
-            throw new IllegalStateException("Only PENDING requests can be quoted");
+            throw new BadRequestException("Only PENDING requests can be quoted");
         }
 
         request.setStatus(CustomOrderStatus.QUOTED);
@@ -97,11 +99,11 @@ public class CustomOrderRequestService {
 
     private CustomOrderRequest findAndValidateSeller(Long requestId, Long sellerId) {
         CustomOrderRequest request = customOrderRequestRepository.findById(requestId)
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Custom order request not found: " + requestId));
 
         if (!request.getSellerId().equals(sellerId)) {
-            throw new IllegalStateException(
+            throw new BadRequestException(
                     "You are not authorised to respond to this request");
         }
 

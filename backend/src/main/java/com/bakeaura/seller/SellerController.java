@@ -3,8 +3,7 @@ package com.bakeaura.seller;
 import com.bakeaura.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,17 +36,17 @@ public class SellerController {
 
     @PatchMapping("/profile")
     public ResponseEntity<ApiResponse<SellerProfileDto>> updateProfile(
-            @AuthenticationPrincipal UserDetails userDetails,
+            Authentication authentication,
             @RequestBody UpdateSellerProfileDto request) {
-        Long userId = Long.parseLong(userDetails.getUsername());
+        Long userId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Profile updated",
                 sellerService.updateProfile(userId, request)));
     }
 
     @PatchMapping("/toggle-open")
     public ResponseEntity<ApiResponse<SellerProfileDto>> toggleOpen(
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = Long.parseLong(userDetails.getUsername());
+            Authentication authentication) {
+        Long userId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Shop status toggled",
                 sellerService.toggleOpen(userId)));
     }

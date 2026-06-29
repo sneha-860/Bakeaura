@@ -4,8 +4,7 @@ import com.bakeaura.enums.CollaborationStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,9 +21,9 @@ public class InfluencerCollaborationController {
     public ResponseEntity<CollaborationResponse> requestCollaboration(
             @PathVariable Long influencerId,
             @RequestBody(required = false) CollaborationRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            Authentication authentication) {
 
-        Long sellerId = Long.parseLong(userDetails.getUsername());
+        Long sellerId = Long.parseLong(authentication.getName());
         String message = request != null ? request.getMessage() : null;
 
         return ResponseEntity.ok(
@@ -34,18 +33,18 @@ public class InfluencerCollaborationController {
     @GetMapping("/incoming")
     @PreAuthorize("hasRole('INFLUENCER')")
     public ResponseEntity<List<CollaborationResponse>> getIncomingRequests(
-            @AuthenticationPrincipal UserDetails userDetails) {
+            Authentication authentication) {
 
-        Long influencerId = Long.parseLong(userDetails.getUsername());
+        Long influencerId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(collaborationService.getMyIncomingRequests(influencerId));
     }
 
     @GetMapping("/outgoing")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<List<CollaborationResponse>> getOutgoingRequests(
-            @AuthenticationPrincipal UserDetails userDetails) {
+            Authentication authentication) {
 
-        Long sellerId = Long.parseLong(userDetails.getUsername());
+        Long sellerId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(collaborationService.getMyOutgoingRequests(sellerId));
     }
 
@@ -54,9 +53,9 @@ public class InfluencerCollaborationController {
     public ResponseEntity<CollaborationResponse> respondToRequest(
             @PathVariable Long sellerId,
             @RequestParam CollaborationStatus status,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            Authentication authentication) {
 
-        Long influencerId = Long.parseLong(userDetails.getUsername());
+        Long influencerId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(
                 collaborationService.respondToRequest(influencerId, sellerId, status));
     }

@@ -73,20 +73,8 @@ public class OrderService {
             throw new BadRequestException("Delivery address is outside the seller's delivery radius");
         }
 
-        if (request.getOrderType() == OrderType.SCHEDULED) {
-            if (request.getScheduledDeliveryDate() == null) {
-                throw new BadRequestException("Scheduled delivery date is required for scheduled orders");
-            }
-            for (CreateOrderRequestDto.OrderItemRequest itemReq : request.getItems()) {
-                Product product = productService.getProductEntityById(itemReq.getProductId());
-                if (product.getMinAdvanceDays() != null) {
-                    LocalDate earliestDate = LocalDate.now().plusDays(product.getMinAdvanceDays());
-                    if (request.getScheduledDeliveryDate().isBefore(earliestDate)) {
-                        throw new BadRequestException("Product " + product.getName() +
-                                " requires at least " + product.getMinAdvanceDays() + " days advance notice");
-                    }
-                }
-            }
+        if (request.getOrderType() == OrderType.SCHEDULED && request.getScheduledDeliveryDate() == null) {
+            throw new BadRequestException("Scheduled delivery date is required for scheduled orders");
         }
 
         Order order = Order.builder()
@@ -108,7 +96,7 @@ public class OrderService {
                 throw new BadRequestException("Product " + product.getId() +
                         " does not belong to the seller");
             }
-            validateProductForOrder(product, itemReq.getQuantity());
+            validateProductForOrder(product, itemReq.getQuantity(), request.getOrderType(), request.getScheduledDeliveryDate());
 
             OrderItem item = OrderItem.builder()
                     .product(product)
@@ -321,7 +309,7 @@ public class OrderService {
         }
     }
 
-    private void validateProductForOrder(Product product, Integer quantity) {
+    private void validateProductForOrder(Product product, Integer quantity, OrderType orderType, LocalDate scheduledDeliveryDate) {
         if (quantity == null || quantity <= 0) {
             throw new BadRequestException("Quantity must be at least 1");
         }
@@ -331,6 +319,17 @@ public class OrderService {
         if (product.getStockQuantity() != null && quantity > product.getStockQuantity()) {
             throw new BadRequestException(
                     "Requested quantity exceeds available stock for product " + product.getId());
+        }
+        if (Boolean.TRUE.equals(product.getIsPreOrderOnly()) && orderType != OrderType.SCHEDULED) {
+            throw new BadRequestException("Product " + product.getName() +
+                    " is a pre-order only item and requires a scheduled order");
+        }
+        if (orderType == OrderType.SCHEDULED && product.getMinAdvanceDays() != null) {
+            LocalDate earliestDate = LocalDate.now().plusDays(product.getMinAdvanceDays());
+            if (scheduledDeliveryDate == null || scheduledDeliveryDate.isBefore(earliestDate)) {
+                throw new BadRequestException("Product " + product.getName() +
+                        " requires at least " + product.getMinAdvanceDays() + " days advance notice");
+            }
         }
     }
 

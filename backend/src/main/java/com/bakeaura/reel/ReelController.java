@@ -5,8 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,7 +23,7 @@ public class ReelController {
     public ResponseEntity<ReelResponseDTO> uploadReel(
             @RequestPart("video") MultipartFile videoFile,
             @RequestPart("caption") String caption,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            Authentication authentication) {
 
         String contentType = videoFile.getContentType();
         if (contentType == null || !contentType.startsWith("video/")) {
@@ -35,7 +34,8 @@ public class ReelController {
             return ResponseEntity.badRequest().build();
         }
 
-        ReelResponseDTO response = reelService.initiateUpload(caption, userDetails.getUsername());
+        Long userId = Long.parseLong(authentication.getName());
+        ReelResponseDTO response = reelService.initiateUpload(caption, userId);
         reelService.processVideoUpload(response.getId(), videoFile);
         return ResponseEntity.accepted().body(response);
     }

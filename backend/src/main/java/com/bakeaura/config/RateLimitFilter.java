@@ -26,7 +26,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Map<String, Bucket> loginBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> registerBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> paymentBuckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> aiBuckets = new ConcurrentHashMap<>();
 
     // Creates a bucket that allows 'capacity' tokens,
     // refilled fully every 'minutes' minutes.
@@ -67,10 +66,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         } else if (method.equals("POST") && path.startsWith("/api/payments")) {
             bucket = resolveBucket(paymentBuckets, ip, 5, 1);
 
-        } else if (path.startsWith("/api/v1/ai")) {
-            bucket = resolveBucket(aiBuckets, ip, 3, 1);
         }
-
         // If this request matches a rate-limited endpoint,
         // try to consume one token from the bucket.
         if (bucket != null) {

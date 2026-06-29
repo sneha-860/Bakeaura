@@ -27,8 +27,8 @@ public class ReelService {
     private final CloudinaryService cloudinaryService;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public ReelResponseDTO initiateUpload(String caption, String sellerEmail) {
-        User seller = userRepository.findByEmail(sellerEmail)
+    public ReelResponseDTO initiateUpload(String caption, Long sellerId) {
+        User seller = userRepository.findById(sellerId)
                 .orElseThrow(() -> new RuntimeException("Seller not found"));
 
         Reel reel = new Reel();
@@ -37,7 +37,7 @@ public class ReelService {
         reel.setStatus(Reel.ReelStatus.PROCESSING);
         Reel saved = reelRepository.save(reel);
 
-        log.info("Created PROCESSING reel ID: {} for seller: {}", saved.getId(), sellerEmail);
+        log.info("Created PROCESSING reel ID: {} for seller ID: {}", saved.getId(), sellerId);
         return toResponseDTO(saved);
     }
 

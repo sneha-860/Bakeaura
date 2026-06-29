@@ -1,8 +1,10 @@
 package com.bakeaura.referral;
 
 import com.bakeaura.influencer.InfluencerProfileService;
+import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,19 @@ public class ReferralOrderService {
     private final InfluencerProfileService influencerProfileService;
     private final WalletService walletService;
 
+    @EventListener
+    public void onOrderCreated(OrderCreatedEvent event) {
+        String code = event.getReferralCode();
+        if (code == null || code.isBlank()) {
+            return;
+        }
+        processReferral(
+                event.getOrder().getId(),
+                code,
+                event.getOrder().getTotalAmount()
+        );
+    }
+
     @Transactional
     public void processReferral(Long orderId, String code, BigDecimal orderTotal) {
 
@@ -29,7 +44,7 @@ public class ReferralOrderService {
         }
 
         Optional<ReferralCode> optionalCode = referralCodeRepository.findByCode(code);
-        if (optionalCode.isEmpty() || !optionalCode.get().isActive()) {
+        if (optionalCode.isEmpty() || !Boolean.TRUE.equals(optionalCode.get().getIsActive())) {
             return;
         }
 

@@ -5,6 +5,8 @@ import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.map.MapService;
 import com.bakeaura.product.ProductService;
+import com.bakeaura.review.ReviewService;
+import com.bakeaura.review.ReviewSummaryDto;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class SellerService {
     private final ProductService productService;
     private final SellerProfileRepository sellerProfileRepository;
     private final MapService mapService;
+    private final ReviewService reviewService;
 
     public List<SellerProfileDto> getSellers() {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
@@ -106,6 +109,8 @@ public class SellerService {
 
         long productCount = productService.getProductsBySeller(seller.getId()).size();
 
+        ReviewSummaryDto reviewSummary = reviewService.getSummary(seller.getId());
+
         int completeness = 0;
         if (profile != null) {
             if (profile.getShopName() != null && !profile.getShopName().isBlank()) completeness += 20;
@@ -126,8 +131,8 @@ public class SellerService {
                 .deliveryRadiusKm(profile != null ? profile.getDeliveryRadiusKm() : null)
                 .isOpen(profile != null ? profile.getIsOpen() : false)
                 .bannerImageUrl(profile != null ? profile.getBannerImageUrl() : null)
-                .totalRatings(profile != null ? profile.getTotalRatings() : 0)
-                .averageRating(profile != null ? profile.getAverageRating() : 0.0)
+                .totalRatings(reviewSummary.getReviewCount() != null ? reviewSummary.getReviewCount().intValue() : 0)
+                .averageRating(reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
                 .productCount(productCount)
                 .profileCompleteness(completeness)
                 .build();
