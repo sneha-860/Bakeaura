@@ -632,12 +632,14 @@ export function InfluencerWalletPage() {
   const [balance, setBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [history, setHistory] = useState([]);
+  const [referralCodes, setReferralCodes] = useState([]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(payoutSchema) });
 
   function load() {
     walletApi.balance().then(setBalance).catch(() => setBalance(null));
     walletApi.transactions().then(setTransactions).catch(() => setTransactions([]));
     payoutsApi.history().then(setHistory).catch(() => setHistory([]));
+    influencersApi.referralCodes().then(setReferralCodes).catch(() => setReferralCodes([]));
   }
   useEffect(load, []);
 
@@ -686,6 +688,19 @@ export function InfluencerWalletPage() {
         </div>
       </section>
       <aside className="summary-panel">
+        <h2>Your referral code</h2>
+        {referralCodes.length > 0 ? (
+          <div className="stack">
+            {referralCodes.map((rc) => (
+              <article className="panel" key={rc.id}>
+                <code className="referral-code">{rc.code}</code>
+                <small>Share this code with customers. You earn commission when they place an order.</small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No active referral code found. Contact support if this is unexpected.</p>
+        )}
         <h2>Request a payout</h2>
         {hasPending ? (
           <p className="muted">You already have a pending payout request — wait for it to be processed before requesting another.</p>
