@@ -7,9 +7,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.bakeaura.enums.CollaborationStatus;
+import com.bakeaura.influencer.InfluencerCollaborationService;
+import com.bakeaura.influencer.InfluencerProfileResponse;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -22,6 +26,7 @@ public class ReferralOrderService {
     private final ReferralCodeRepository referralCodeRepository;
     private final InfluencerProfileService influencerProfileService;
     private final WalletService walletService;
+    private final InfluencerCollaborationService influencerCollaborationService;
 
     @EventListener
     public void onOrderCreated(OrderCreatedEvent event) {
@@ -70,5 +75,39 @@ public class ReferralOrderService {
                 commission,
                 "Referral commission for order #" + orderId
         );
+    }
+
+    public List<ReferralOrder> getReferralOrdersByInfluencer(Long influencerId) {
+        return referralOrderRepository.findByReferralCode_Influencer_IdOrderByCreatedAtDesc(influencerId);
+    }
+
+    public InfluencerAnalyticsDto getDashboardAnalytics(Long influencerId) {
+        InfluencerProfileResponse profile = influencerProfileService.getMyProfile(influencerId);
+
+        BigDecimal walletBalance = walletService.getBalance(influencerId);
+
+        List<ReferralOrder> referralOrders = getReferralOrdersByInfluencer(influencerId);
+
+        List<InfluencerAnalyticsDto.RecentReferralOrder> recentOrders = referralOrders.stream()
+                .limit(10)
+                .map(ro -> InfluencerAnalyticsDto.RecentReferralOrder.builder()
+                        .orderId(ro.getOrderId())
+                        .commissionAmount(ro.getCommissionAmount())
+                        .createdAt(ro.getCreatedAt())
+                        .build())
+                .toList();
+
+        long activeCollaborationsCount = influencerCollaborationService.getMyIncomingRequests(influencerId)
+                .stream()
+                .filter(c -> c.getStatus() == CollaborationStatus.APPROVED)
+                .count();
+
+        return InfluencerAnalyticsDto.builder()
+                .totalEarnings(profile.getTotalEarnings())
+                .walletBalance(walletBalance)
+                .totalReferralOrders((long) referralOrders.size())
+                .recentReferralOrders(recentOrders)
+                .activeCollaborationsCount(activeCollaborationsCount)
+                .build();
     }
 }

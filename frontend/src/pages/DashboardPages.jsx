@@ -108,12 +108,15 @@ export function SellerDashboardPage() {
       <section className="page-hero compact-hero">
         <p className="eyebrow">Seller Studio</p>
         <h1>{me?.name || 'Seller dashboard'}</h1>
-        {shopProfile ? (
-          <div className="hero-actions">
-            <span className={`pill ${shopProfile.isOpen ? 'success' : 'danger'}`}>{shopProfile.isOpen ? 'Shop open' : 'Shop closed'}</span>
-            <Button variant="ghost" onClick={toggleShopOpen}>{shopProfile.isOpen ? 'Close shop' : 'Open shop'}</Button>
-          </div>
-        ) : null}
+        <div className="hero-actions">
+          {shopProfile ? (
+            <>
+              <span className={`pill ${shopProfile.isOpen ? 'success' : 'danger'}`}>{shopProfile.isOpen ? 'Shop open' : 'Shop closed'}</span>
+              <Button variant="ghost" onClick={toggleShopOpen}>{shopProfile.isOpen ? 'Close shop' : 'Open shop'}</Button>
+            </>
+          ) : null}
+          <Link className="btn btn-ghost" to="/seller/analytics">Analytics</Link>
+        </div>
       </section>
       <Stats cards={[['Products', products.length, <Package />], ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />], ['Gross order value', currency(gross), <Users />]]} />
       <section className="section two-column">
@@ -539,7 +542,31 @@ export function InfluencerDashboardPage() {
   const [me, setMe] = useState(null);
   const [applications, setApplications] = useState([]);
   useEffect(() => { usersApi.me().then(setMe); roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([])); }, []);
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Creator Hub</p><h1>{me?.name || 'Influencer dashboard'}</h1><p>{me?.email}</p></section><section className="section"><h2>Your applications</h2><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{titleCase(app.requestedRole)}</h3><p>{app.message}</p></article>)}{!applications.length ? <EmptyState title="No applications found" /> : null}</div></section></div>;
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero">
+        <p className="eyebrow">Creator Hub</p>
+        <h1>{me?.name || 'Influencer dashboard'}</h1>
+        <p>{me?.email}</p>
+        <div className="hero-actions">
+          <Link className="btn btn-ghost" to="/influencer/analytics">Analytics</Link>
+        </div>
+      </section>
+      <section className="section">
+        <h2>Your applications</h2>
+        <div className="stack">
+          {applications.map((app) => (
+            <article className="panel" key={app.id}>
+              <span className="pill">{app.status}</span>
+              <h3>{titleCase(app.requestedRole)}</h3>
+              <p>{app.message}</p>
+            </article>
+          ))}
+          {!applications.length ? <EmptyState title="No applications found" /> : null}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export function SellerCollaborationsPage() {

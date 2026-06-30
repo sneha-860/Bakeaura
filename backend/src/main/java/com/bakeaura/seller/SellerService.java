@@ -14,6 +14,15 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.bakeaura.order.Order;
+import com.bakeaura.order.OrderItem;
+import com.bakeaura.order.OrderService;
+import com.bakeaura.enums.OrderStatus;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import java.util.List;
 
@@ -26,6 +35,7 @@ public class SellerService {
     private final SellerProfileRepository sellerProfileRepository;
     private final MapService mapService;
     private final ReviewService reviewService;
+    private final OrderService orderService;
 
     public List<SellerProfileDto> getSellers() {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
@@ -135,6 +145,70 @@ public class SellerService {
                 .averageRating(reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
                 .productCount(productCount)
                 .profileCompleteness(completeness)
+                .build();
+    }
+
+    public SellerAnalyticsDto getDashboardAnalytics(Long sellerId) {
+        User seller = userRepository.findById(sellerId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (seller.getRole() != Role.SELLER) {
+            throw new BadRequestException("User is not a seller");
+        }
+
+        List<Order> orders = orderService.getOrdersBySellerForAnalytics(sellerId);
+
+        List<Order> revenueOrders = orders.stream()
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                .toList();
+
+        BigDecimal totalRevenueAllTime = revenueOrders.stream()
+                .map(Order::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        LocalDate today = LocalDate.now();
+        LocalDate startOfMonth = today.withDayOfMonth(1);
+        LocalDate startOfWeek = today.minusDays(today.getDayOfWeek().getValue() - 1);
+
+        BigDecimal totalRevenueThisMonth = revenueOrders.stream()
+                .filter(o -> !o.getCreatedAt().toLocalDate().isBefore(startOfMonth))
+                .map(Order::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalRevenueThisWeek = revenueOrders.stream()
+                .filter(o -> !o.getCreatedAt().toLocalDate().isBefore(startOfWeek))
+                .map(Order::getTotalAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Long> orderCountsByStatus = orders.stream()
+                .collect(Collectors.groupingBy(o -> o.getStatus().name(), Collectors.counting()));
+
+        BigDecimal averageOrderValue = revenueOrders.isEmpty()
+                ? BigDecimal.ZERO
+                : totalRevenueAllTime.divide(BigDecimal.valueOf(revenueOrders.size()), 2, RoundingMode.HALF_UP);
+
+        Map<String, Long> quantityByProduct = revenueOrders.stream()
+                .flatMap(o -> o.getItems().stream())
+                .collect(Collectors.groupingBy(
+                        item -> item.getProduct().getName(),
+                        Collectors.summingLong(OrderItem::getQuantity)));
+
+        Map.Entry<String, Long> bestSelling = quantityByProduct.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElse(null);
+
+        ReviewSummaryDto reviewSummary = reviewService.getSummary(sellerId);
+
+        return SellerAnalyticsDto.builder()
+                .totalRevenueAllTime(totalRevenueAllTime)
+                .totalRevenueThisMonth(totalRevenueThisMonth)
+                .totalRevenueThisWeek(totalRevenueThisWeek)
+                .orderCountsByStatus(orderCountsByStatus)
+                .averageOrderValue(averageOrderValue)
+                .bestSellingProductName(bestSelling != null ? bestSelling.getKey() : null)
+                .bestSellingProductQuantity(bestSelling != null ? bestSelling.getValue() : 0L)
+                .averageRating(reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
+                .totalRatings(reviewSummary.getReviewCount() != null ? reviewSummary.getReviewCount().intValue() : 0)
                 .build();
     }
 }

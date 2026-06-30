@@ -1,6 +1,7 @@
 package com.bakeaura.cart;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,6 +18,7 @@ public class CartItemDto implements Serializable {
     private Integer quantity;
     private BigDecimal unitPrice;
 
+    @JsonIgnore
     public BigDecimal getSubtotal() {
         return unitPrice.multiply(BigDecimal.valueOf(quantity));
     }

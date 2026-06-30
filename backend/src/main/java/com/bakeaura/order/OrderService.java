@@ -281,6 +281,10 @@ public class OrderService {
         return orderRepository.count();
     }
 
+    public List<Order> getOrdersBySellerForAnalytics(Long sellerId) {
+        return orderRepository.findBySeller_IdOrderByCreatedAtDesc(sellerId);
+    }
+
     private CreateOrderRequestDto.OrderItemRequest toOrderItemRequest(CartItemDto cartItem) {
         CreateOrderRequestDto.OrderItemRequest item = new CreateOrderRequestDto.OrderItemRequest();
         item.setProductId(cartItem.getProductId());

@@ -50,4 +50,12 @@ public class SellerController {
         return ResponseEntity.ok(ApiResponse.ok("Shop status toggled",
                 sellerService.toggleOpen(userId)));
     }
+
+    @GetMapping("/dashboard/analytics")
+    public ResponseEntity<ApiResponse<SellerAnalyticsDto>> getDashboardAnalytics(
+            Authentication authentication) {
+        Long userId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(ApiResponse.ok("Analytics fetched",
+                sellerService.getDashboardAnalytics(userId)));
+    }
 }

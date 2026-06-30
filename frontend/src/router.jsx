@@ -13,6 +13,8 @@ import { InfluencerProfilePage, InfluencersPage, SellerStorefrontPage, SellersPa
 import { AdminApplicationsPage, AdminDashboardPage, AdminPayoutsPage, AdminUsersPage, InfluencerCollaborationsPage, InfluencerDashboardPage, InfluencerWalletPage, IncomingOrdersPage, MyProductsPage, SellerCollaborationsPage, SellerCustomOrdersPage, SellerDashboardPage } from './pages/DashboardPages';
 import ReelUploadPage from './pages/ReelUploadPage';
 import ReelFeedPage from './pages/ReelFeedPage';
+import SellerAnalyticsPage from './pages/seller/SellerAnalyticsPage';
+import InfluencerAnalyticsPage from './pages/influencer/InfluencerAnalyticsPage';
 
 const router = createBrowserRouter([
   {
@@ -57,7 +59,8 @@ const router = createBrowserRouter([
           { path: '/seller/products', element: <MyProductsPage /> },
           { path: '/seller/orders', element: <IncomingOrdersPage /> },
           { path: '/seller/custom-orders', element: <SellerCustomOrdersPage /> },
-          { path: '/seller/collaborations', element: <SellerCollaborationsPage /> }
+          { path: '/seller/collaborations', element: <SellerCollaborationsPage /> },
+          { path: '/seller/analytics', element: <SellerAnalyticsPage /> }
         ]
       },
       {
@@ -65,7 +68,8 @@ const router = createBrowserRouter([
         children: [
           { path: '/influencer', element: <InfluencerDashboardPage /> },
           { path: '/influencer/collaborations', element: <InfluencerCollaborationsPage /> },
-          { path: '/influencer/wallet', element: <InfluencerWalletPage /> }
+          { path: '/influencer/wallet', element: <InfluencerWalletPage /> },
+          { path: '/influencer/analytics', element: <InfluencerAnalyticsPage /> }
         ]
       },
       {

@@ -9,4 +9,6 @@ public interface ReferralOrderRepository extends JpaRepository<ReferralOrder, Lo
     boolean existsByOrderId(Long orderId);
 
     List<ReferralOrder> findByReferralCode_Id(Long referralCodeId);
+
+    List<ReferralOrder> findByReferralCode_Influencer_IdOrderByCreatedAtDesc(Long influencerId);
 }
