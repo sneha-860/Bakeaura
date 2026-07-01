@@ -89,4 +89,24 @@ public class CloudinaryService {
     public void deleteFileFallback(String publicId, String resourceType, Throwable t) {
         log.warn("Cloudinary circuit breaker triggered for delete. Public ID: {}. Cause: {}", publicId, t.getMessage());
     }
+
+    @CircuitBreaker(name = "cloudinary", fallbackMethod = "uploadImageBytesFallback")
+    public Map<String, Object> uploadImageBytes(byte[] imageBytes, String folderName) throws IOException {
+        return cloudinary.uploader().upload(
+                imageBytes,
+                ObjectUtils.asMap(
+                        "resource_type", "image",
+                        "folder",        folderName,
+                        "transformation", ObjectUtils.asMap(
+                                "quality", "auto",
+                                "fetch_format", "auto"
+                        )
+                )
+        );
+    }
+
+    public Map<String, Object> uploadImageBytesFallback(byte[] imageBytes, String folderName, Throwable t) {
+        log.error("Cloudinary circuit breaker triggered for AI image upload. Cause: {}", t.getMessage());
+        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+    }
 }

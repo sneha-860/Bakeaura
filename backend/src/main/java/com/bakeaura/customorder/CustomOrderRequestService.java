@@ -109,4 +109,33 @@ public class CustomOrderRequestService {
 
         return request;
     }
+    @Transactional
+    public CustomOrderRequest submitAiGeneratedRequest(
+            Long customerId,
+            Long sellerId,
+            String designBrief,
+            String generatedImageUrl,
+            String occasion,
+            Integer serves,
+            BigDecimal budgetMin,
+            BigDecimal budgetMax) {
+
+        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
+                customerId, sellerId, CustomOrderStatus.PENDING)) {
+            throw new BadRequestException(
+                    "You already have a pending request with this seller");
+        }
+
+        CustomOrderRequest request = new CustomOrderRequest();
+        request.setCustomerId(customerId);
+        request.setSellerId(sellerId);
+        request.setDesignBrief(designBrief);
+        request.setGeneratedImageUrl(generatedImageUrl);
+        request.setOccasion(occasion);
+        request.setServes(serves);
+        request.setBudgetMin(budgetMin);
+        request.setBudgetMax(budgetMax);
+
+        return customOrderRequestRepository.save(request);
+    }
 }

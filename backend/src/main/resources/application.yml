@@ -50,6 +50,14 @@ spring:
         max-size: 8
         queue-capacity: 100
 
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
+        chat:
+          options:
+            model: gemini-2.5-flash
+
   servlet:
     multipart:
       max-file-size: 200MB

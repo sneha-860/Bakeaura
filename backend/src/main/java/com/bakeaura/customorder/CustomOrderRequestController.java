@@ -20,16 +20,12 @@ public class CustomOrderRequestController {
     @PostMapping("/custom-orders")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<CustomOrderRequest> submitRequest(
-            @RequestParam Long sellerId,
-            @RequestParam String designBrief,
-            @RequestParam String occasion,
-            @RequestParam Integer serves,
-            @RequestParam BigDecimal budgetMin,
-            @RequestParam BigDecimal budgetMax,
+            @RequestBody SubmitCustomOrderDto dto,
             Authentication authentication) {
         Long customerId = Long.parseLong(authentication.getName());
         CustomOrderRequest result = customOrderRequestService.submitRequest(
-                customerId, sellerId, designBrief, occasion, serves, budgetMin, budgetMax);
+                customerId, dto.getSellerId(), dto.getDesignBrief(), dto.getOccasion(),
+                dto.getServes(), dto.getBudgetMin(), dto.getBudgetMax());
         return ResponseEntity.ok(result);
     }
 

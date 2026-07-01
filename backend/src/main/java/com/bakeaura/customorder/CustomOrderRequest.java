@@ -9,7 +9,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "custom_order_requests")
+@Table(
+        name = "custom_order_requests",
+        indexes = {
+                @Index(name = "idx_custom_order_seller_status", columnList = "seller_id, status")
+        }
+)
 @Getter
 @Setter
 public class CustomOrderRequest {
