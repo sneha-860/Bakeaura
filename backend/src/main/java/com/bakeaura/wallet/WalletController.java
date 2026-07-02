@@ -1,5 +1,6 @@
 package com.bakeaura.wallet;
 
+import com.bakeaura.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,15 +21,18 @@ public class WalletController {
 
     @GetMapping("/balance")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<BigDecimal> getBalance(Authentication authentication) {
+    public ResponseEntity<ApiResponse<BigDecimal>> getBalance(Authentication authentication) {
         Long influencerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(walletService.getBalance(influencerId));
+        return ResponseEntity.ok(ApiResponse.ok("Balance fetched",
+                walletService.getBalance(influencerId)));
     }
 
     @GetMapping("/transactions")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<List<WalletTransaction>> getTransactions(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<WalletTransaction>>> getTransactions(
+            Authentication authentication) {
         Long influencerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(walletService.getTransactionHistory(influencerId));
+        return ResponseEntity.ok(ApiResponse.ok("Transactions fetched",
+                walletService.getTransactionHistory(influencerId)));
     }
 }

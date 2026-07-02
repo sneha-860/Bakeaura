@@ -12,4 +12,5 @@ import lombok.Setter;
 public class CakeDesignPreviewResponseDto {
     private String designBrief;
     private String imageBase64;
+    private String mimeType;
 }

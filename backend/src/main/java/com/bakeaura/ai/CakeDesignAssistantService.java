@@ -3,6 +3,7 @@ package com.bakeaura.ai;
 import com.bakeaura.cloudinary.CloudinaryService;
 import com.bakeaura.customorder.CustomOrderRequest;
 import com.bakeaura.customorder.CustomOrderRequestService;
+import com.bakeaura.exception.ServiceUnavailableException;
 import com.bakeaura.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,14 +24,26 @@ public class CakeDesignAssistantService {
     private final CustomOrderRequestService customOrderRequestService;
     private final NotificationService notificationService;
 
-    public CakeDesignPreviewResponseDto generatePreview(String description, String occasion) {
+    public CakeDesignPreviewResponseDto generatePreview(
+            String description, String occasion, String referenceImageBase64) {
+
         String prompt = "Occasion: " + occasion + ". Customer request: " + description;
 
-        String designBrief = geminiAiService.generateDesignBrief(prompt);
-        byte[] imageBytes = geminiAiService.generateCakeImage(designBrief);
-        String imageBase64 = Base64.getEncoder().encodeToString(imageBytes);
+        String designBrief;
+        if (referenceImageBase64 != null && !referenceImageBase64.isBlank()) {
+            byte[] referenceImageBytes = Base64.getDecoder().decode(referenceImageBase64);
+            String imagePrompt = prompt + " The customer has attached a reference photo showing "
+                    + "the style they like. Write a design brief for a baker to recreate a similar "
+                    + "style — describe it as inspired by the reference, not an exact copy.";
+            designBrief = geminiAiService.generateDesignBriefFromImage(imagePrompt, referenceImageBytes);
+        } else {
+            designBrief = geminiAiService.generateDesignBrief(prompt);
+        }
 
-        return new CakeDesignPreviewResponseDto(designBrief, imageBase64);
+        CakeImageResult imageResult = geminiAiService.generateCakeImage(designBrief);
+        String imageBase64 = Base64.getEncoder().encodeToString(imageResult.data());
+
+        return new CakeDesignPreviewResponseDto(designBrief, imageBase64, imageResult.mimeType());
     }
 
     public CustomOrderRequest confirmAndSubmit(Long customerId, ConfirmCustomOrderDto dto) {
@@ -64,7 +77,7 @@ public class CakeDesignAssistantService {
             return (String) uploadResult.get("secure_url");
         } catch (IOException e) {
             log.error("Failed to upload AI-generated cake image to Cloudinary", e);
-            throw new RuntimeException("Could not save the generated cake image. Please try again.");
+            throw new ServiceUnavailableException("Could not save the generated cake image. Please try again.");
         }
     }
 }

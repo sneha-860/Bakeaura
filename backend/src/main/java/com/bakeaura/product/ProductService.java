@@ -3,7 +3,9 @@ package com.bakeaura.product;
 import com.bakeaura.category.CategoryRepository;
 import com.bakeaura.category.Category;
 import com.bakeaura.enums.Role;
+import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import jakarta.persistence.criteria.Predicate;
@@ -31,7 +33,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (seller.getRole() != Role.SELLER) {
-            throw new RuntimeException("Only sellers can create products");
+            throw new BadRequestException("Only sellers can create products");
         }
 
         Category category = categoryRepository.findById(dto.getCategoryId())
@@ -87,7 +89,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!product.getSeller().getId().equals(seller.getId())) {
-            throw new RuntimeException("You can update only your own products");
+            throw new AccessDeniedException("You can update only your own products");
         }
 
         Category category = categoryRepository.findById(dto.getCategoryId())
@@ -112,7 +114,7 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!product.getSeller().getId().equals(seller.getId())) {
-            throw new RuntimeException("You can delete only your own products");
+            throw new AccessDeniedException("You can delete only your own products");
         }
 
         productRepository.delete(product);

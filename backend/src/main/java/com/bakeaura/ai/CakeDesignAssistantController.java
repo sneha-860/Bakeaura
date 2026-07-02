@@ -1,6 +1,8 @@
 package com.bakeaura.ai;
 
+import com.bakeaura.common.ApiResponse;
 import com.bakeaura.customorder.CustomOrderRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,19 +21,19 @@ public class CakeDesignAssistantController {
 
     @PostMapping("/preview")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<CakeDesignPreviewResponseDto> previewDesign(
-            @RequestBody CakeDesignPreviewRequestDto dto) {
+    public ResponseEntity<ApiResponse<CakeDesignPreviewResponseDto>> previewDesign(
+            @Valid @RequestBody CakeDesignPreviewRequestDto dto) {
 
-        CakeDesignPreviewResponseDto response =
-                cakeDesignAssistantService.generatePreview(dto.getDescription(), dto.getOccasion());
+        CakeDesignPreviewResponseDto response = cakeDesignAssistantService.generatePreview(
+                dto.getDescription(), dto.getOccasion(), dto.getReferenceImageBase64());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.ok("Design preview generated", response));
     }
 
     @PostMapping("/confirm")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<CakeDesignChatResponseDto> confirmDesign(
-            @RequestBody ConfirmCustomOrderDto dto,
+    public ResponseEntity<ApiResponse<CakeDesignChatResponseDto>> confirmDesign(
+            @Valid @RequestBody ConfirmCustomOrderDto dto,
             Authentication authentication) {
 
         Long customerId = Long.parseLong(authentication.getName());
@@ -44,6 +46,6 @@ public class CakeDesignAssistantController {
                 result.getGeneratedImageUrl(),
                 result.getStatus().name());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.ok("Custom order request submitted", response));
     }
 }

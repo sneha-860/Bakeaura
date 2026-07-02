@@ -3,6 +3,7 @@ package com.bakeaura.customorder;
 import com.bakeaura.enums.CustomOrderStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.util.List;
 public class CustomOrderRequestService {
 
     private final CustomOrderRequestRepository customOrderRequestRepository;
+    private final UserService userService;
 
     @Transactional
     public CustomOrderRequest submitRequest(
@@ -25,6 +27,10 @@ public class CustomOrderRequestService {
             Integer serves,
             BigDecimal budgetMin,
             BigDecimal budgetMax) {
+
+        if (!userService.isActiveSeller(sellerId)) {
+            throw new BadRequestException("Selected seller is not a valid active seller");
+        }
 
         if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
                 customerId, sellerId, CustomOrderStatus.PENDING)) {
@@ -109,6 +115,7 @@ public class CustomOrderRequestService {
 
         return request;
     }
+
     @Transactional
     public CustomOrderRequest submitAiGeneratedRequest(
             Long customerId,
@@ -119,6 +126,10 @@ public class CustomOrderRequestService {
             Integer serves,
             BigDecimal budgetMin,
             BigDecimal budgetMax) {
+
+        if (!userService.isActiveSeller(sellerId)) {
+            throw new BadRequestException("Selected seller is not a valid active seller");
+        }
 
         if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
                 customerId, sellerId, CustomOrderStatus.PENDING)) {

@@ -55,8 +55,10 @@ export default function Navbar() {
     <>
       <NavLink to="/products">Products</NavLink>
       <NavLink to="/sellers">Bakers</NavLink>
-      
       <NavLink to="/reels">Reels</NavLink>
+      {role === Role.CUSTOMER ? (
+        <NavLink to="/design">Design a Cake</NavLink>
+      ) : null}
       {role === Role.SELLER ? (
         <>
           <NavLink to="/seller">Seller Studio</NavLink>

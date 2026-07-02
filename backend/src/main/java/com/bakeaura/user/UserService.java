@@ -103,4 +103,11 @@ public class UserService {
                 user.getUpdatedAt()
         );
     }
+
+    public boolean isActiveSeller(Long userId) {
+        return userRepository.findById(userId)
+                .map(user -> user.getRole() == com.bakeaura.enums.Role.SELLER
+                        && Boolean.TRUE.equals(user.getIsActive()))
+                .orElse(false);
+    }
 }

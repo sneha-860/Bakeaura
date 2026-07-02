@@ -1,5 +1,6 @@
 package com.bakeaura.influencer;
 
+import com.bakeaura.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,12 +18,14 @@ public class InfluencerController {
     private final InfluencerProfileService influencerProfileService;
 
     @GetMapping
-    public ResponseEntity<List<InfluencerPublicDto>> getInfluencers() {
-        return ResponseEntity.ok(influencerProfileService.getInfluencers());
+    public ResponseEntity<ApiResponse<List<InfluencerPublicDto>>> getInfluencers() {
+        return ResponseEntity.ok(ApiResponse.ok("Influencers fetched",
+                influencerProfileService.getInfluencers()));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<InfluencerPublicDto> getInfluencer(@PathVariable Long id) {
-        return ResponseEntity.ok(influencerProfileService.getInfluencer(id));
+    public ResponseEntity<ApiResponse<InfluencerPublicDto>> getInfluencer(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok("Influencer fetched",
+                influencerProfileService.getInfluencer(id)));
     }
 }

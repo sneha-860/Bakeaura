@@ -75,6 +75,12 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Something went wrong", "INTERNAL_SERVER_ERROR");
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleServiceUnavailable(ServiceUnavailableException ex) {
+        log.error("External service unavailable: {}", ex.getMessage());
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), "SERVICE_UNAVAILABLE");
+    }
+
     private ResponseEntity<ApiResponse<Void>> error(HttpStatus status, String message, String errorCode) {
         return ResponseEntity.status(status).body(ApiResponse.error(message, errorCode));
     }

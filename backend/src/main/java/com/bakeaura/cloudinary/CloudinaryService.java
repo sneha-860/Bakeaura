@@ -6,8 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.bakeaura.exception.ServiceUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-
 
 import java.io.IOException;
 import java.util.Map;
@@ -54,7 +54,7 @@ public class CloudinaryService {
 
     public Map<String, Object> uploadVideoFallback(MultipartFile file, String folderName, Throwable t) {
         log.error("Cloudinary circuit breaker triggered for video upload. Cause: {}", t.getMessage());
-        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+        throw new ServiceUnavailableException("Media upload service is temporarily unavailable. Please try again in a moment.");
     }
 
     @CircuitBreaker(name = "cloudinary", fallbackMethod = "uploadImageFallback")
@@ -74,7 +74,7 @@ public class CloudinaryService {
 
     public Map<String, Object> uploadImageFallback(MultipartFile file, String folderName, Throwable t) {
         log.error("Cloudinary circuit breaker triggered for image upload. Cause: {}", t.getMessage());
-        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+        throw new ServiceUnavailableException("Media upload service is temporarily unavailable. Please try again in a moment.");
     }
 
     @CircuitBreaker(name = "cloudinary", fallbackMethod = "deleteFileFallback")
@@ -107,6 +107,6 @@ public class CloudinaryService {
 
     public Map<String, Object> uploadImageBytesFallback(byte[] imageBytes, String folderName, Throwable t) {
         log.error("Cloudinary circuit breaker triggered for AI image upload. Cause: {}", t.getMessage());
-        throw new RuntimeException("Media upload service is temporarily unavailable. Please try again in a moment.");
+        throw new ServiceUnavailableException("Media upload service is temporarily unavailable. Please try again in a moment.");
     }
 }

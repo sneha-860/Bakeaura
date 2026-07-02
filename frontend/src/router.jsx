@@ -15,6 +15,7 @@ import ReelUploadPage from './pages/ReelUploadPage';
 import ReelFeedPage from './pages/ReelFeedPage';
 import SellerAnalyticsPage from './pages/seller/SellerAnalyticsPage';
 import InfluencerAnalyticsPage from './pages/influencer/InfluencerAnalyticsPage';
+import CakeDesignPage from './pages/CakeDesignPage';
 
 const router = createBrowserRouter([
   {
@@ -38,7 +39,8 @@ const router = createBrowserRouter([
           { path: '/cart', element: <CartPage /> },
           { path: '/checkout', element: <CheckoutPage /> },
           { path: '/orders', element: <MyOrdersPage /> },
-          { path: '/custom-orders', element: <CustomOrdersPage /> }
+          { path: '/custom-orders', element: <CustomOrdersPage /> },
+          { path: '/design', element: <CakeDesignPage /> }
         ]
       },
       {

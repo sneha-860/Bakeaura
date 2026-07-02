@@ -7,6 +7,7 @@ import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.exception.ServiceUnavailableException;
 import com.bakeaura.order.OrderRepository;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
@@ -96,13 +97,13 @@ public class PaymentService {
 
         } catch (RazorpayException e) {
             log.error("Failed to create Razorpay order: {}", e.getMessage());
-            throw new RuntimeException("Payment gateway error: " + e.getMessage());
+            throw new ServiceUnavailableException("Payment gateway error: " + e.getMessage());
         }
     }
 
     public String createRazorpayOrderFallback(BigDecimal amount, Long internalOrderId, Throwable t) {
         log.error("Razorpay circuit breaker triggered for order {}. Cause: {}", internalOrderId, t.getMessage());
-        throw new RuntimeException("Payment service is temporarily unavailable. Please try again in a moment.");
+        throw new ServiceUnavailableException("Payment service is temporarily unavailable. Please try again in a moment.");
     }
 
     @Transactional

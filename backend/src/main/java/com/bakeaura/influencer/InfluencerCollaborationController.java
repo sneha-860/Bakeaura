@@ -1,5 +1,6 @@
 package com.bakeaura.influencer;
 
+import com.bakeaura.common.ApiResponse;
 import com.bakeaura.enums.CollaborationStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,7 @@ public class InfluencerCollaborationController {
 
     @PostMapping("/request/{influencerId}")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<CollaborationResponse> requestCollaboration(
+    public ResponseEntity<ApiResponse<CollaborationResponse>> requestCollaboration(
             @PathVariable Long influencerId,
             @RequestBody(required = false) CollaborationRequest request,
             Authentication authentication) {
@@ -26,37 +27,39 @@ public class InfluencerCollaborationController {
         Long sellerId = Long.parseLong(authentication.getName());
         String message = request != null ? request.getMessage() : null;
 
-        return ResponseEntity.ok(
-                collaborationService.requestCollaboration(sellerId, influencerId, message));
+        return ResponseEntity.ok(ApiResponse.ok("Collaboration request sent",
+                collaborationService.requestCollaboration(sellerId, influencerId, message)));
     }
 
     @GetMapping("/incoming")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<List<CollaborationResponse>> getIncomingRequests(
+    public ResponseEntity<ApiResponse<List<CollaborationResponse>>> getIncomingRequests(
             Authentication authentication) {
 
         Long influencerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(collaborationService.getMyIncomingRequests(influencerId));
+        return ResponseEntity.ok(ApiResponse.ok("Incoming requests fetched",
+                collaborationService.getMyIncomingRequests(influencerId)));
     }
 
     @GetMapping("/outgoing")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<List<CollaborationResponse>> getOutgoingRequests(
+    public ResponseEntity<ApiResponse<List<CollaborationResponse>>> getOutgoingRequests(
             Authentication authentication) {
 
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(collaborationService.getMyOutgoingRequests(sellerId));
+        return ResponseEntity.ok(ApiResponse.ok("Outgoing requests fetched",
+                collaborationService.getMyOutgoingRequests(sellerId)));
     }
 
     @PatchMapping("/respond/{sellerId}")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<CollaborationResponse> respondToRequest(
+    public ResponseEntity<ApiResponse<CollaborationResponse>> respondToRequest(
             @PathVariable Long sellerId,
             @RequestParam CollaborationStatus status,
             Authentication authentication) {
 
         Long influencerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                collaborationService.respondToRequest(influencerId, sellerId, status));
+        return ResponseEntity.ok(ApiResponse.ok("Response recorded",
+                collaborationService.respondToRequest(influencerId, sellerId, status)));
     }
 }
