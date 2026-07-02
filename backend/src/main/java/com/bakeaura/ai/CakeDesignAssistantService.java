@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Base64;
 import java.util.Map;
 
 @Service
@@ -22,25 +23,32 @@ public class CakeDesignAssistantService {
     private final CustomOrderRequestService customOrderRequestService;
     private final NotificationService notificationService;
 
-    public CustomOrderRequest createCustomOrderFromDescription(
-            Long customerId,
-            Long sellerId,
-            String customerDescription,
-            String occasion,
-            Integer serves,
-            BigDecimal budgetMin,
-            BigDecimal budgetMax) {
+    public CakeDesignPreviewResponseDto generatePreview(String description, String occasion) {
+        String prompt = "Occasion: " + occasion + ". Customer request: " + description;
 
-        String designBrief = geminiAiService.generateDesignBrief(customerDescription);
+        String designBrief = geminiAiService.generateDesignBrief(prompt);
         byte[] imageBytes = geminiAiService.generateCakeImage(designBrief);
+        String imageBase64 = Base64.getEncoder().encodeToString(imageBytes);
+
+        return new CakeDesignPreviewResponseDto(designBrief, imageBase64);
+    }
+
+    public CustomOrderRequest confirmAndSubmit(Long customerId, ConfirmCustomOrderDto dto) {
+        byte[] imageBytes = Base64.getDecoder().decode(dto.getImageBase64());
         String imageUrl = uploadGeneratedImage(imageBytes);
 
         CustomOrderRequest result = customOrderRequestService.submitAiGeneratedRequest(
-                customerId, sellerId, designBrief, imageUrl,
-                occasion, serves, budgetMin, budgetMax);
+                customerId,
+                dto.getSellerId(),
+                dto.getDesignBrief(),
+                imageUrl,
+                dto.getOccasion(),
+                dto.getServes(),
+                dto.getBudgetMin(),
+                dto.getBudgetMax());
 
         notificationService.notifyUser(
-                sellerId,
+                dto.getSellerId(),
                 "CUSTOM_ORDER_REQUEST",
                 "New AI-generated custom cake request waiting for your response.",
                 result.getId()

@@ -17,22 +17,26 @@ public class CakeDesignAssistantController {
 
     private final CakeDesignAssistantService cakeDesignAssistantService;
 
-    @PostMapping
+    @PostMapping("/preview")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<CakeDesignChatResponseDto> generateCustomOrder(
-            @RequestBody CakeDesignChatRequestDto dto,
+    public ResponseEntity<CakeDesignPreviewResponseDto> previewDesign(
+            @RequestBody CakeDesignPreviewRequestDto dto) {
+
+        CakeDesignPreviewResponseDto response =
+                cakeDesignAssistantService.generatePreview(dto.getDescription(), dto.getOccasion());
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/confirm")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<CakeDesignChatResponseDto> confirmDesign(
+            @RequestBody ConfirmCustomOrderDto dto,
             Authentication authentication) {
 
         Long customerId = Long.parseLong(authentication.getName());
 
-        CustomOrderRequest result = cakeDesignAssistantService.createCustomOrderFromDescription(
-                customerId,
-                dto.getSellerId(),
-                dto.getDescription(),
-                dto.getOccasion(),
-                dto.getServes(),
-                dto.getBudgetMin(),
-                dto.getBudgetMax());
+        CustomOrderRequest result = cakeDesignAssistantService.confirmAndSubmit(customerId, dto);
 
         CakeDesignChatResponseDto response = new CakeDesignChatResponseDto(
                 result.getId(),
