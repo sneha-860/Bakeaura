@@ -410,10 +410,3 @@ Full request/response shapes are documented in `backend/BAKEAURA_API_REFERENCE.m
 
 ---
 
-## Known Limitations
-
-- **Test suite is partially stale** — 8 of 12 test files reference the old `email-as-JWT-subject` API surface and will not compile. Only `MapServiceTest`, `CategoryControllerTest`, `CategoryServiceTest`, and `BakeauraBackendApplicationTests` match the current codebase.
-- **No follow/unfollow, no Stories** — These were originally planned but are not implemented. The Reel feed uses engagement-based ranking, not a social graph.
-- **`SellerProfile.totalRatings` / `averageRating` columns are always zero** — `ReviewService.getSummary` uses a live `AVG()` query (correct); `SellerService.toDto` reads the stale columns (incorrect). Use the summary endpoint for accurate ratings.
-- **`PayoutStatus.PAID` can only be reached via the admin "Mark as paid" action** — there is no automated payout-to-UPI step; admin marks manually after transferring outside the app.
-- **AI rate limit** — The `RateLimitFilter` allows 3 AI requests per 10 minutes per IP on `POST /api/ai/**`.
