@@ -17,7 +17,6 @@ A full-stack home-bakery marketplace connecting customers with local home bakers
 - [Environment Variables](#environment-variables)
 - [API Overview](#api-overview)
 - [Key Design Decisions](#key-design-decisions)
-- [Known Limitations](#known-limitations)
 
 ---
 
