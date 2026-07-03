@@ -17,7 +17,8 @@ import java.util.List;
 @Entity
 @Table(name = "orders", indexes = {
         @Index(name = "idx_order_customer_id", columnList = "customer_id"),
-        @Index(name = "idx_order_seller_id", columnList = "seller_id")
+        @Index(name = "idx_order_seller_id", columnList = "seller_id"),
+        @Index(name = "idx_order_status", columnList = "status")
 })    // "order" is a reserved SQL keyword — always use "orders"
 @Getter @Setter
 @NoArgsConstructor

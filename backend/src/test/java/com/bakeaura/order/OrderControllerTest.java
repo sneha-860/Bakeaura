@@ -9,6 +9,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -21,8 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -59,9 +59,9 @@ class OrderControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void customerCanCreateOrder() throws Exception {
-        when(orderService.createOrder(any(CreateOrderRequestDto.class), eq("customer@example.com")))
+        when(orderService.createOrder(any(CreateOrderRequestDto.class), eq(1L)))
                 .thenReturn(response(OrderStatus.PENDING));
 
         mockMvc.perform(post("/api/orders")
@@ -72,11 +72,11 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.message").value("Order created"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
 
-        verify(orderService).createOrder(any(CreateOrderRequestDto.class), eq("customer@example.com"));
+        verify(orderService).createOrder(any(CreateOrderRequestDto.class), eq(1L));
     }
 
     @Test
-    @WithMockUser(username = "seller@example.com", roles = "SELLER")
+    @WithMockUser(username = "2", roles = "SELLER")
     void sellerCannotCreateOrder() throws Exception {
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -88,7 +88,7 @@ class OrderControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void createOrderRejectsInvalidQuantity() throws Exception {
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -114,7 +114,7 @@ class OrderControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void createOrderRejectsInvalidCoordinates() throws Exception {
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -140,9 +140,9 @@ class OrderControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "seller@example.com", roles = "SELLER")
+    @WithMockUser(username = "2", roles = "SELLER")
     void sellerCanUpdateStatus() throws Exception {
-        when(orderService.updateStatus(1L, OrderStatus.PREPARING, "seller@example.com"))
+        when(orderService.updateStatus(1L, OrderStatus.PREPARING, 2L))
                 .thenReturn(response(OrderStatus.PREPARING));
 
         mockMvc.perform(patch("/api/orders/1/status").param("status", "PREPARING"))
@@ -151,41 +151,41 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.message").value("Order status updated"))
                 .andExpect(jsonPath("$.data.status").value("PREPARING"));
 
-        verify(orderService).updateStatus(1L, OrderStatus.PREPARING, "seller@example.com");
+        verify(orderService).updateStatus(1L, OrderStatus.PREPARING, 2L);
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void customerCanGetOwnOrders() throws Exception {
-        when(orderService.getMyOrders("customer@example.com"))
-                .thenReturn(List.of(response(OrderStatus.PENDING)));
+        when(orderService.getMyOrders(eq(1L), anyInt(), anyInt()))
+                .thenReturn(new PageImpl<>(List.of(response(OrderStatus.PENDING))));
 
         mockMvc.perform(get("/api/orders/my-orders"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+                .andExpect(jsonPath("$.data.content[0].status").value("PENDING"));
 
-        verify(orderService).getMyOrders("customer@example.com");
+        verify(orderService).getMyOrders(eq(1L), anyInt(), anyInt());
     }
 
     @Test
-    @WithMockUser(username = "seller@example.com", roles = "SELLER")
+    @WithMockUser(username = "2", roles = "SELLER")
     void sellerCanGetSellerOrders() throws Exception {
-        when(orderService.getSellerOrders("seller@example.com", null))
-                .thenReturn(List.of(response(OrderStatus.CONFIRMED)));
+        when(orderService.getSellerOrders(eq(2L), isNull(), anyInt(), anyInt()))
+                .thenReturn(new PageImpl<>(List.of(response(OrderStatus.CONFIRMED))));
 
         mockMvc.perform(get("/api/orders/seller-orders"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].status").value("CONFIRMED"));
+                .andExpect(jsonPath("$.data.content[0].status").value("CONFIRMED"));
 
-        verify(orderService).getSellerOrders("seller@example.com", null);
+        verify(orderService).getSellerOrders(eq(2L), isNull(), anyInt(), anyInt());
     }
 
     @Test
-    @WithMockUser(username = "admin@example.com", roles = "ADMIN")
+    @WithMockUser(username = "3", roles = "ADMIN")
     void authenticatedUserCanGetOrderById() throws Exception {
-        when(orderService.getOrderById(1L, "admin@example.com"))
+        when(orderService.getOrderById(1L, 3L))
                 .thenReturn(response(OrderStatus.CONFIRMED));
 
         mockMvc.perform(get("/api/orders/1"))
@@ -194,7 +194,7 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.message").value("Order fetched"))
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
 
-        verify(orderService).getOrderById(1L, "admin@example.com");
+        verify(orderService).getOrderById(1L, 3L);
     }
 
     @Test
@@ -214,6 +214,7 @@ class OrderControllerTest {
                   "deliveryAddress": "Delhi",
                   "deliveryLatitude": 28.1,
                   "deliveryLongitude": 77.1,
+                  "orderType": "INSTANT",
                   "items": [
                     {
                       "productId": 10,

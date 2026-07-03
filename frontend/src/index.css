@@ -1,3 +1,6 @@
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --cream: #FAF6F1;
   --warm-white: #FFFDF9;
@@ -18,6 +21,28 @@
   font-family: 'Quicksand', system-ui, sans-serif;
   color: var(--espresso);
   background: var(--cream);
+
+  /* shadcn/ui design tokens — mapped to Bakeaura's brand palette */
+  --background: 30 50% 97%;          /* cream #FAF6F1 */
+  --foreground: 14 47% 12%;          /* espresso #2C1810 */
+  --card: 40 100% 99%;               /* warm-white #FFFDF9 */
+  --card-foreground: 14 47% 12%;
+  --popover: 40 100% 99%;
+  --popover-foreground: 14 47% 12%;
+  --primary: 17 54% 49%;             /* sienna #C0603A */
+  --primary-foreground: 0 0% 98%;
+  --secondary: 33 46% 64%;           /* gold #C8A97E */
+  --secondary-foreground: 14 47% 12%;
+  --muted: 30 28% 94%;
+  --muted-foreground: 20 11% 40%;    /* ink-soft #6f625c */
+  --accent: 33 100% 97%;             /* accent-cream #FFF8F0 */
+  --accent-foreground: 17 54% 49%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --ui-border: 30 36% 86%;           /* #E8D9C8 — avoids collision with --border: #E8D9C8 */
+  --input: 30 36% 86%;
+  --ring: 17 54% 49%;                /* sienna */
+  --radius: 0.75rem;
 }
 
 * { box-sizing: border-box; }

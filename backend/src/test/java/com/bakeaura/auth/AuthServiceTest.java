@@ -2,6 +2,7 @@ package com.bakeaura.auth;
 
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
+import com.bakeaura.notification.EmailService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,11 +17,14 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+
+    @Mock
+    private EmailService emailService;
 
     @Mock
     private UserRepository userRepository;
@@ -38,7 +42,7 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder, jwtUtil, refreshTokenStore);
+        authService = new AuthService(emailService, userRepository, passwordEncoder, jwtUtil, refreshTokenStore);
     }
 
     @Test
@@ -51,8 +55,8 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(jwtUtil.generateAccessToken("test@example.com", Role.CUSTOMER)).thenReturn("access-token");
-        when(jwtUtil.generateRefreshToken("test@example.com")).thenReturn("refresh-token");
+        when(jwtUtil.generateAccessToken(any(), eq(Role.CUSTOMER))).thenReturn("access-token");
+        when(jwtUtil.generateRefreshToken(any())).thenReturn("refresh-token");
 
         AuthResponse response = authService.register(request);
 
@@ -66,7 +70,7 @@ class AuthServiceTest {
         assertThat(savedUser.getRole()).isEqualTo(Role.CUSTOMER);
         assertThat(savedUser.getIsActive()).isTrue();
 
-        verify(refreshTokenStore).store("test@example.com", "refresh-token");
+        verify(refreshTokenStore).store(any(), eq("refresh-token"));
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
         assertThat(response.getRole()).isEqualTo(Role.CUSTOMER);
@@ -132,12 +136,12 @@ class AuthServiceTest {
         User user = activeUser(Role.SELLER);
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password123", "encoded-password")).thenReturn(true);
-        when(jwtUtil.generateAccessToken("test@example.com", Role.SELLER)).thenReturn("access-token");
-        when(jwtUtil.generateRefreshToken("test@example.com")).thenReturn("refresh-token");
+        when(jwtUtil.generateAccessToken(any(), eq(Role.SELLER))).thenReturn("access-token");
+        when(jwtUtil.generateRefreshToken(any())).thenReturn("refresh-token");
 
         AuthResponse response = authService.login(request);
 
-        verify(refreshTokenStore).store("test@example.com", "refresh-token");
+        verify(refreshTokenStore).store(any(), eq("refresh-token"));
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
         assertThat(response.getRole()).isEqualTo(Role.SELLER);
@@ -164,9 +168,9 @@ class AuthServiceTest {
 
         when(jwtUtil.isTokenValid("refresh-token")).thenReturn(true);
         when(jwtUtil.isRefreshToken("refresh-token")).thenReturn(true);
-        when(jwtUtil.extractEmail("refresh-token")).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
-        when(refreshTokenStore.matches("test@example.com", "refresh-token")).thenReturn(false);
+        when(jwtUtil.extractUserId("refresh-token")).thenReturn(10L);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user));
+        when(refreshTokenStore.matches(10L, "refresh-token")).thenReturn(false);
 
         assertThatThrownBy(() -> authService.refresh(request))
                 .isInstanceOf(BadRequestException.class)
@@ -181,9 +185,9 @@ class AuthServiceTest {
 
         when(jwtUtil.isTokenValid("refresh-token")).thenReturn(true);
         when(jwtUtil.isRefreshToken("refresh-token")).thenReturn(true);
-        when(jwtUtil.extractEmail("refresh-token")).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
-        when(refreshTokenStore.matches("test@example.com", "refresh-token")).thenReturn(true);
+        when(jwtUtil.extractUserId("refresh-token")).thenReturn(10L);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user));
+        when(refreshTokenStore.matches(10L, "refresh-token")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.refresh(request))
                 .isInstanceOf(BadRequestException.class)
@@ -199,15 +203,15 @@ class AuthServiceTest {
 
         when(jwtUtil.isTokenValid("old-refresh-token")).thenReturn(true);
         when(jwtUtil.isRefreshToken("old-refresh-token")).thenReturn(true);
-        when(jwtUtil.extractEmail("old-refresh-token")).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
-        when(refreshTokenStore.matches("test@example.com", "old-refresh-token")).thenReturn(true);
-        when(jwtUtil.generateAccessToken("test@example.com", Role.ADMIN)).thenReturn("new-access-token");
-        when(jwtUtil.generateRefreshToken("test@example.com")).thenReturn("new-refresh-token");
+        when(jwtUtil.extractUserId("old-refresh-token")).thenReturn(10L);
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user));
+        when(refreshTokenStore.matches(10L, "old-refresh-token")).thenReturn(true);
+        when(jwtUtil.generateAccessToken(10L, Role.ADMIN)).thenReturn("new-access-token");
+        when(jwtUtil.generateRefreshToken(10L)).thenReturn("new-refresh-token");
 
         AuthResponse response = authService.refresh(request);
 
-        verify(refreshTokenStore).store("test@example.com", "new-refresh-token");
+        verify(refreshTokenStore).store(10L, "new-refresh-token");
         assertThat(response.getAccessToken()).isEqualTo("new-access-token");
         assertThat(response.getRefreshToken()).isEqualTo("new-refresh-token");
         assertThat(response.getRole()).isEqualTo(Role.ADMIN);
@@ -220,11 +224,11 @@ class AuthServiceTest {
 
         when(jwtUtil.isTokenValid("refresh-token")).thenReturn(true);
         when(jwtUtil.isRefreshToken("refresh-token")).thenReturn(true);
-        when(jwtUtil.extractEmail("refresh-token")).thenReturn("test@example.com");
+        when(jwtUtil.extractUserId("refresh-token")).thenReturn(10L);
 
         authService.logout(request);
 
-        verify(refreshTokenStore).revoke("test@example.com");
+        verify(refreshTokenStore).revoke(10L);
     }
 
     private RefreshTokenRequest refreshRequest(String refreshToken) {
@@ -235,6 +239,7 @@ class AuthServiceTest {
 
     private User activeUser(Role role) {
         User user = new User();
+        user.setId(10L);
         user.setName("Test User");
         user.setEmail("test@example.com");
         user.setPassword("encoded-password");

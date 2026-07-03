@@ -3,7 +3,7 @@ package com.bakeaura.cart;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.product.Product;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +35,7 @@ class CartServiceTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductService productService;
 
     @Mock
     private UserRepository userRepository;
@@ -44,7 +44,7 @@ class CartServiceTest {
 
     @BeforeEach
     void setUp() {
-        cartService = new CartService(redisTemplate, productRepository, userRepository);
+        cartService = new CartService(redisTemplate, productService, userRepository);
     }
 
     @Test
@@ -53,7 +53,7 @@ class CartServiceTest {
         givenRedisValueOperations();
         when(valueOperations.get("cart:10")).thenReturn(null);
 
-        CartDto cart = cartService.getCart("customer@example.com");
+        CartDto cart = cartService.getCart(10L);
 
         assertThat(cart.getUserEmail()).isEqualTo("customer@example.com");
         assertThat(cart.getItems()).isEmpty();
@@ -65,10 +65,10 @@ class CartServiceTest {
         givenUser();
         givenRedisValueOperations();
         Product product = product(1L, "Cake", "100.00", 5, true);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(1L)).thenReturn(product);
         when(valueOperations.get("cart:10")).thenReturn(null);
 
-        CartDto cart = cartService.addItem("customer@example.com", 1L, 2);
+        CartDto cart = cartService.addItem(10L, 1L, 2);
 
         assertThat(cart.getItems()).hasSize(1);
         CartItemDto item = cart.getItems().get(0);
@@ -88,9 +88,9 @@ class CartServiceTest {
         CartDto existingCart = cartWithItem(1L, "Old Cake", 2, "90.00");
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(1L)).thenReturn(product);
 
-        CartDto cart = cartService.addItem("customer@example.com", 1L, 3);
+        CartDto cart = cartService.addItem(10L, 1L, 3);
 
         assertThat(cart.getItems()).hasSize(1);
         CartItemDto item = cart.getItems().get(0);
@@ -103,9 +103,9 @@ class CartServiceTest {
     void addItemRejectsUnavailableProduct() {
         givenUser();
         Product product = product(1L, "Cake", "100.00", 5, false);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(1L)).thenReturn(product);
 
-        assertThatThrownBy(() -> cartService.addItem("customer@example.com", 1L, 1))
+        assertThatThrownBy(() -> cartService.addItem(10L, 1L, 1))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Product is not available");
 
@@ -117,10 +117,10 @@ class CartServiceTest {
         givenUser();
         givenRedisValueOperations();
         Product product = product(1L, "Cake", "100.00", 2, true);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(1L)).thenReturn(product);
         when(valueOperations.get("cart:10")).thenReturn(null);
 
-        assertThatThrownBy(() -> cartService.addItem("customer@example.com", 1L, 3))
+        assertThatThrownBy(() -> cartService.addItem(10L, 1L, 3))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Requested quantity exceeds available stock");
 
@@ -133,9 +133,9 @@ class CartServiceTest {
         givenRedisValueOperations();
         CartDto existingCart = cartWithItem(1L, "Cake", 2, "100.00");
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product(1L, "Cake", "100.00", 5, true)));
+        when(productService.getProductEntityById(1L)).thenReturn(product(1L, "Cake", "100.00", 5, true));
 
-        CartDto cart = cartService.updateQuantity("customer@example.com", 1L, 0);
+        CartDto cart = cartService.updateQuantity(10L, 1L, 0);
 
         assertThat(cart.getItems()).isEmpty();
         verify(valueOperations, atLeastOnce()).set(eq("cart:10"), eq(cart), eq(Duration.ofDays(7)));
@@ -146,9 +146,9 @@ class CartServiceTest {
         givenUser();
         givenRedisValueOperations();
         when(valueOperations.get("cart:10")).thenReturn(new CartDto("customer@example.com", new ArrayList<>()));
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product(1L, "Cake", "100.00", 5, true)));
+        when(productService.getProductEntityById(1L)).thenReturn(product(1L, "Cake", "100.00", 5, true));
 
-        assertThatThrownBy(() -> cartService.updateQuantity("customer@example.com", 1L, 2))
+        assertThatThrownBy(() -> cartService.updateQuantity(10L, 1L, 2))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Cart item not found");
     }
@@ -161,9 +161,9 @@ class CartServiceTest {
         Product product = product(1L, "New Name", "75.00", 4, true);
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(1L)).thenReturn(product);
 
-        CartDto cart = cartService.getCart("customer@example.com");
+        CartDto cart = cartService.getCart(10L);
 
         CartItemDto item = cart.getItems().get(0);
         assertThat(item.getProductName()).isEqualTo("New Name");
@@ -184,12 +184,12 @@ class CartServiceTest {
         )));
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
-        when(productRepository.findById(1L)).thenReturn(Optional.empty());
-        when(productRepository.findById(2L)).thenReturn(Optional.of(product(2L, "Unavailable", "20.00", 5, false)));
-        when(productRepository.findById(3L)).thenReturn(Optional.of(product(3L, "Out", "30.00", 0, true)));
-        when(productRepository.findById(4L)).thenReturn(Optional.of(product(4L, "Kept", "40.00", 5, true)));
+        when(productService.getProductEntityById(1L)).thenThrow(new ResourceNotFoundException("Product not found"));
+        when(productService.getProductEntityById(2L)).thenReturn(product(2L, "Unavailable", "20.00", 5, false));
+        when(productService.getProductEntityById(3L)).thenReturn(product(3L, "Out", "30.00", 0, true));
+        when(productService.getProductEntityById(4L)).thenReturn(product(4L, "Kept", "40.00", 5, true));
 
-        CartDto cart = cartService.getCart("customer@example.com");
+        CartDto cart = cartService.getCart(10L);
 
         assertThat(cart.getItems()).hasSize(1);
         assertThat(cart.getItems().get(0).getProductId()).isEqualTo(4L);
@@ -199,7 +199,7 @@ class CartServiceTest {
     void clearCartDeletesRedisKey() {
         givenUser();
 
-        cartService.clearCart("customer@example.com");
+        cartService.clearCart(10L);
 
         verify(redisTemplate).delete("cart:10");
     }
@@ -214,10 +214,10 @@ class CartServiceTest {
         )));
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product(1L, "Cake", "100.00", 5, true)));
-        when(productRepository.findById(2L)).thenReturn(Optional.of(product(2L, "Cookie", "50.00", 5, true)));
+        when(productService.getProductEntityById(1L)).thenReturn(product(1L, "Cake", "100.00", 5, true));
+        when(productService.getProductEntityById(2L)).thenReturn(product(2L, "Cookie", "50.00", 5, true));
 
-        CartDto cart = cartService.removeItem("customer@example.com", 1L);
+        CartDto cart = cartService.removeItem(10L, 1L);
 
         assertThat(cart.getItems()).hasSize(1);
         assertThat(cart.getItems().get(0).getProductId()).isEqualTo(2L);
@@ -227,7 +227,7 @@ class CartServiceTest {
         User user = new User();
         user.setId(10L);
         user.setEmail("customer@example.com");
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findById(10L)).thenReturn(Optional.of(user));
     }
 
     private void givenRedisValueOperations() {

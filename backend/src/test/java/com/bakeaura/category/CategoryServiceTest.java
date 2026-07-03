@@ -2,7 +2,7 @@ package com.bakeaura.category;
 
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,13 +25,13 @@ class CategoryServiceTest {
     private CategoryRepository categoryRepository;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductService productService;
 
     private CategoryService categoryService;
 
     @BeforeEach
     void setUp() {
-        categoryService = new CategoryService(categoryRepository, productRepository);
+        categoryService = new CategoryService(categoryRepository, productService);
     }
 
     @Test
@@ -136,7 +136,7 @@ class CategoryServiceTest {
     void deleteCategoryDeletesWhenNoProductsUseIt() {
         Category existing = category(1L, "Cakes", "Cake desc", "cakes.jpg");
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(productRepository.existsByCategoryId(1L)).thenReturn(false);
+        when(productService.existsByCategory(1L)).thenReturn(false);
 
         categoryService.deleteCategory(1L);
 
@@ -147,7 +147,7 @@ class CategoryServiceTest {
     void deleteCategoryRejectsWhenProductsUseIt() {
         Category existing = category(1L, "Cakes", "Cake desc", "cakes.jpg");
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(productRepository.existsByCategoryId(1L)).thenReturn(true);
+        when(productService.existsByCategory(1L)).thenReturn(true);
 
         assertThatThrownBy(() -> categoryService.deleteCategory(1L))
                 .isInstanceOf(BadRequestException.class)

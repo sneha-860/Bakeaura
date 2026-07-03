@@ -1,6 +1,7 @@
 package com.bakeaura.reel;
 
 import com.bakeaura.cloudinary.CloudinaryService;
+import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -29,7 +31,7 @@ public class ReelService {
 
     public ReelResponseDTO initiateUpload(String caption, Long sellerId) {
         User seller = userRepository.findById(sellerId)
-                .orElseThrow(() -> new RuntimeException("Seller not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Seller not found"));
 
         Reel reel = new Reel();
         reel.setSeller(seller);
@@ -96,6 +98,11 @@ public class ReelService {
                         Reel.ReelStatus.ACTIVE,
                         PageRequest.of(page, size, Sort.by("createdAt").descending()))
                 .map(this::toResponseDTO);
+    }
+
+    @Transactional
+    public void incrementViewCount(Long reelId) {
+        reelRepository.incrementViewCount(reelId);
     }
 
     public List<ReelResponseDTO> getSellerReels(Long sellerId) {

@@ -1,5 +1,6 @@
 package com.bakeaura.customorder;
 
+import com.bakeaura.common.ApiResponse;
 import com.bakeaura.enums.CustomOrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,71 +20,71 @@ public class CustomOrderRequestController {
 
     @PostMapping("/custom-orders")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<CustomOrderRequest> submitRequest(
+    public ResponseEntity<ApiResponse<CustomOrderRequest>> submitRequest(
             @RequestBody SubmitCustomOrderDto dto,
             Authentication authentication) {
         Long customerId = Long.parseLong(authentication.getName());
         CustomOrderRequest result = customOrderRequestService.submitRequest(
                 customerId, dto.getSellerId(), dto.getDesignBrief(), dto.getOccasion(),
                 dto.getServes(), dto.getBudgetMin(), dto.getBudgetMax());
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(ApiResponse.ok("Custom order submitted", result));
     }
 
     @GetMapping("/custom-orders/my-requests")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<List<CustomOrderRequest>> getMyRequests(
+    public ResponseEntity<ApiResponse<List<CustomOrderRequest>>> getMyRequests(
             Authentication authentication) {
         Long customerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.getRequestsForCustomer(customerId));
+        return ResponseEntity.ok(ApiResponse.ok("Custom orders fetched",
+                customOrderRequestService.getRequestsForCustomer(customerId)));
     }
 
     @GetMapping("/seller/custom-orders")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<List<CustomOrderRequest>> getAllRequestsForSeller(
+    public ResponseEntity<ApiResponse<List<CustomOrderRequest>>> getAllRequestsForSeller(
             Authentication authentication) {
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.getAllRequestsForSeller(sellerId));
+        return ResponseEntity.ok(ApiResponse.ok("Custom orders fetched",
+                customOrderRequestService.getAllRequestsForSeller(sellerId)));
     }
 
     @GetMapping("/seller/custom-orders/pending")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<List<CustomOrderRequest>> getPendingRequestsForSeller(
+    public ResponseEntity<ApiResponse<List<CustomOrderRequest>>> getPendingRequestsForSeller(
             Authentication authentication) {
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.getPendingRequestsForSeller(sellerId));
+        return ResponseEntity.ok(ApiResponse.ok("Pending custom orders fetched",
+                customOrderRequestService.getPendingRequestsForSeller(sellerId)));
     }
 
     @PutMapping("/seller/custom-orders/{id}/accept")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<CustomOrderRequest> acceptRequest(
+    public ResponseEntity<ApiResponse<CustomOrderRequest>> acceptRequest(
             @PathVariable Long id,
             Authentication authentication) {
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.acceptRequest(id, sellerId));
+        return ResponseEntity.ok(ApiResponse.ok("Custom order accepted",
+                customOrderRequestService.acceptRequest(id, sellerId)));
     }
 
     @PutMapping("/seller/custom-orders/{id}/reject")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<CustomOrderRequest> rejectRequest(
+    public ResponseEntity<ApiResponse<CustomOrderRequest>> rejectRequest(
             @PathVariable Long id,
             Authentication authentication) {
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.rejectRequest(id, sellerId));
+        return ResponseEntity.ok(ApiResponse.ok("Custom order rejected",
+                customOrderRequestService.rejectRequest(id, sellerId)));
     }
 
     @PutMapping("/seller/custom-orders/{id}/quote")
     @PreAuthorize("hasRole('SELLER')")
-    public ResponseEntity<CustomOrderRequest> sendQuote(
+    public ResponseEntity<ApiResponse<CustomOrderRequest>> sendQuote(
             @PathVariable Long id,
             @RequestParam BigDecimal quote,
             Authentication authentication) {
         Long sellerId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(
-                customOrderRequestService.sendQuote(id, sellerId, quote));
+        return ResponseEntity.ok(ApiResponse.ok("Quote sent",
+                customOrderRequestService.sendQuote(id, sellerId, quote)));
     }
 }

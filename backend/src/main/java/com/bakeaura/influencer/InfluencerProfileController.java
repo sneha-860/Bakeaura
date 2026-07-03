@@ -1,5 +1,6 @@
 package com.bakeaura.influencer;
 
+import com.bakeaura.common.ApiResponse;
 import com.bakeaura.referral.ReferralCodeResponse;
 import com.bakeaura.referral.ReferralCodeService;
 import lombok.RequiredArgsConstructor;
@@ -23,37 +24,37 @@ public class InfluencerProfileController {
 
     @GetMapping("/profile")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<InfluencerProfileResponse> getMyProfile(Authentication authentication) {
+    public ResponseEntity<ApiResponse<InfluencerProfileResponse>> getMyProfile(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(influencerProfileService.getMyProfile(userId));
+        return ResponseEntity.ok(ApiResponse.ok("Profile fetched", influencerProfileService.getMyProfile(userId)));
     }
 
     @PatchMapping("/profile")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<InfluencerProfileResponse> updateMyProfile(
+    public ResponseEntity<ApiResponse<InfluencerProfileResponse>> updateMyProfile(
             Authentication authentication,
             @RequestBody InfluencerProfileUpdateRequest request) {
         Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(influencerProfileService.updateMyProfile(userId, request));
+        return ResponseEntity.ok(ApiResponse.ok("Profile updated", influencerProfileService.updateMyProfile(userId, request)));
     }
 
     @GetMapping("/profile/{userId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<InfluencerProfileResponse> getProfileByUserId(@PathVariable Long userId) {
-        return ResponseEntity.ok(influencerProfileService.getMyProfile(userId));
+    public ResponseEntity<ApiResponse<InfluencerProfileResponse>> getProfileByUserId(@PathVariable Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok("Profile fetched", influencerProfileService.getMyProfile(userId)));
     }
 
     @GetMapping("/referral-codes")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<List<ReferralCodeResponse>> getMyReferralCodes(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<ReferralCodeResponse>>> getMyReferralCodes(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(referralCodeService.getMyActiveCodes(userId));
+        return ResponseEntity.ok(ApiResponse.ok("Referral codes fetched", referralCodeService.getMyActiveCodes(userId)));
     }
 
     @GetMapping("/dashboard/analytics")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<InfluencerAnalyticsDto> getDashboardAnalytics(Authentication authentication) {
+    public ResponseEntity<ApiResponse<InfluencerAnalyticsDto>> getDashboardAnalytics(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(referralOrderService.getDashboardAnalytics(userId));
+        return ResponseEntity.ok(ApiResponse.ok("Analytics fetched", referralOrderService.getDashboardAnalytics(userId)));
     }
 }

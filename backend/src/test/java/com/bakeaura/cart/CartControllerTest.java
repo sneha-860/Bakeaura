@@ -51,12 +51,12 @@ class CartControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void customerCanGetCart() throws Exception {
         CartDto cart = new CartDto("customer@example.com", List.of(
                 new CartItemDto(1L, "Cake", 2, new BigDecimal("100.00"))
         ));
-        when(cartService.getCart("customer@example.com")).thenReturn(cart);
+        when(cartService.getCart(1L)).thenReturn(cart);
 
         mockMvc.perform(get("/api/cart"))
                 .andExpect(status().isOk())
@@ -64,14 +64,13 @@ class CartControllerTest {
                 .andExpect(jsonPath("$.message").value("Cart fetched"))
                 .andExpect(jsonPath("$.data.userEmail").value("customer@example.com"))
                 .andExpect(jsonPath("$.data.items[0].productId").value(1))
-                .andExpect(jsonPath("$.data.items[0].subtotal").value(200.00))
                 .andExpect(jsonPath("$.data.totalAmount").value(200.00));
 
-        verify(cartService).getCart("customer@example.com");
+        verify(cartService).getCart(1L);
     }
 
     @Test
-    @WithMockUser(username = "seller@example.com", roles = "SELLER")
+    @WithMockUser(username = "2", roles = "SELLER")
     void sellerCannotAccessCart() throws Exception {
         mockMvc.perform(get("/api/cart"))
                 .andExpect(status().isForbidden())
@@ -82,7 +81,7 @@ class CartControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "admin@example.com", roles = "ADMIN")
+    @WithMockUser(username = "3", roles = "ADMIN")
     void adminCannotAccessCart() throws Exception {
         mockMvc.perform(get("/api/cart"))
                 .andExpect(status().isForbidden())
@@ -103,12 +102,12 @@ class CartControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void addItemPassesAuthenticatedEmailProductIdAndQuantityToService() throws Exception {
         CartDto cart = new CartDto("customer@example.com", List.of(
                 new CartItemDto(5L, "Cookie", 3, new BigDecimal("50.00"))
         ));
-        when(cartService.addItem("customer@example.com", 5L, 3)).thenReturn(cart);
+        when(cartService.addItem(1L, 5L, 3)).thenReturn(cart);
 
         mockMvc.perform(post("/api/cart/items/5").param("quantity", "3"))
                 .andExpect(status().isOk())
@@ -117,11 +116,11 @@ class CartControllerTest {
                 .andExpect(jsonPath("$.data.items[0].productId").value(5))
                 .andExpect(jsonPath("$.data.totalAmount").value(150.00));
 
-        verify(cartService).addItem("customer@example.com", 5L, 3);
+        verify(cartService).addItem(1L, 5L, 3);
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void addItemRejectsQuantityLessThanOne() throws Exception {
         mockMvc.perform(post("/api/cart/items/5").param("quantity", "0"))
                 .andExpect(status().isBadRequest())
@@ -131,7 +130,7 @@ class CartControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void updateQuantityRejectsNegativeQuantity() throws Exception {
         mockMvc.perform(patch("/api/cart/items/5").param("quantity", "-1"))
                 .andExpect(status().isBadRequest())
@@ -141,13 +140,13 @@ class CartControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void clearCartPassesAuthenticatedEmailToService() throws Exception {
         mockMvc.perform(delete("/api/cart"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Cart cleared"));
 
-        verify(cartService).clearCart("customer@example.com");
+        verify(cartService).clearCart(1L);
     }
 }

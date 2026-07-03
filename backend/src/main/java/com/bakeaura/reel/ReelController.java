@@ -54,4 +54,10 @@ public class ReelController {
         return ResponseEntity.ok(ApiResponse.ok("Seller reels fetched",
                 reelService.getSellerReels(sellerId)));
     }
+
+    @PostMapping("/{id}/view")
+    public ResponseEntity<Void> incrementViewCount(@PathVariable Long id) {
+        reelService.incrementViewCount(id);
+        return ResponseEntity.noContent().build();
+    }
 }

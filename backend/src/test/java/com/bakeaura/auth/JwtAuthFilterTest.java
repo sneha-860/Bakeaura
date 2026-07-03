@@ -47,14 +47,14 @@ class JwtAuthFilterTest {
 
         when(jwtUtil.isTokenValid("access-token")).thenReturn(true);
         when(jwtUtil.isAccessToken("access-token")).thenReturn(true);
-        when(jwtUtil.extractEmail("access-token")).thenReturn("test@example.com");
+        when(jwtUtil.extractUserId("access-token")).thenReturn(1L);
         when(jwtUtil.extractRole("access-token")).thenReturn(Role.ADMIN);
 
         jwtAuthFilter.doFilter(request, response, filterChain);
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
-        assertThat(authentication.getName()).isEqualTo("test@example.com");
+        assertThat(authentication.getName()).isEqualTo("1");
         assertThat(authentication.getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_ADMIN");
@@ -73,7 +73,7 @@ class JwtAuthFilterTest {
         jwtAuthFilter.doFilter(request, response, filterChain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(jwtUtil, never()).extractEmail(any());
+        verify(jwtUtil, never()).extractUserId(any());
         verify(jwtUtil, never()).extractRole(any());
     }
 

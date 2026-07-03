@@ -8,7 +8,7 @@ import com.bakeaura.order.Order;
 import com.bakeaura.order.OrderItem;
 import com.bakeaura.order.OrderRepository;
 import com.bakeaura.product.Product;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
@@ -42,7 +42,7 @@ class PaymentServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductService productService;
 
     @Mock
     private OrderTrackingService orderTrackingService;
@@ -64,7 +64,7 @@ class PaymentServiceTest {
                 razorpayClient,
                 paymentRepository,
                 orderRepository,
-                productRepository,
+                productService,
                 userRepository,
                 orderTrackingService,
                 notificationService
@@ -106,7 +106,7 @@ class PaymentServiceTest {
         assertThat(payment.getRazorpaySignature()).isEqualTo(signature(payload));
         assertThat(product.getStockQuantity()).isEqualTo(3);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-        verify(productRepository).save(product);
+        verify(productService).saveProduct(product);
         verify(orderRepository).save(order);
         verify(orderTrackingService).broadcastStatusUpdate(1L, OrderStatus.CONFIRMED);
     }
@@ -128,7 +128,34 @@ class PaymentServiceTest {
 
         Product product = order.getItems().get(0).getProduct();
         assertThat(product.getStockQuantity()).isEqualTo(5);
-        verify(productRepository, never()).save(any());
+        verify(productService, never()).saveProduct(any());
+        verify(orderRepository, never()).save(any());
+        verifyNoInteractions(orderTrackingService);
+    }
+
+    @Test
+    void webhookIdempotencyKeepsPaymentAndOrderStateIntact() {
+        // Proves all state (payment status, order status, stock, all repository writes) is frozen
+        // when the same payment.captured webhook arrives a second time; HMAC-SHA256 is verified on both calls
+        Order order = orderWithProductStock(5);
+        order.setStatus(OrderStatus.CONFIRMED);
+        Payment payment = Payment.builder()
+                .order(order)
+                .razorpayOrderId("order_razorpay")
+                .amount(order.getTotalAmount())
+                .status(PaymentStatus.CAPTURED)
+                .build();
+        String payload = capturedPayload();
+
+        when(paymentRepository.findByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
+
+        paymentService.handleWebhook(payload, signature(payload));
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(order.getItems().get(0).getProduct().getStockQuantity()).isEqualTo(5);
+        verify(paymentRepository, never()).save(any());
+        verify(productService, never()).saveProduct(any());
         verify(orderRepository, never()).save(any());
         verifyNoInteractions(orderTrackingService);
     }
@@ -196,7 +223,7 @@ class PaymentServiceTest {
 
         paymentService.handleWebhook(payload, signature(payload));
 
-        verifyNoInteractions(paymentRepository, orderRepository, productRepository, orderTrackingService);
+        verifyNoInteractions(paymentRepository, orderRepository, productService, orderTrackingService);
     }
 
     @Test
@@ -216,9 +243,9 @@ class PaymentServiceTest {
                 .build();
 
         when(paymentRepository.findByOrder_Id(1L)).thenReturn(Optional.of(payment));
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
 
-        PaymentResponseDto response = paymentService.getPaymentByOrderId(1L, "customer@example.com");
+        PaymentResponseDto response = paymentService.getPaymentByOrderId(1L, 1L);
 
         assertThat(response.getId()).isEqualTo(20L);
         assertThat(response.getOrderId()).isEqualTo(1L);

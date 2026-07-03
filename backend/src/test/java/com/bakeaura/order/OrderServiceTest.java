@@ -6,10 +6,11 @@ import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.map.MapService;
 import com.bakeaura.cart.CartService;
+import com.bakeaura.notification.EmailService;
 import com.bakeaura.notification.NotificationService;
-import com.bakeaura.payment.PaymentService;
+import com.bakeaura.notification.SmsService;
 import com.bakeaura.product.Product;
-import com.bakeaura.product.ProductRepository;
+import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,16 +39,13 @@ class OrderServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private ProductRepository productRepository;
+    private ProductService productService;
 
     @Mock
     private UserRepository userRepository;
 
     @Mock
     private MapService mapService;
-
-    @Mock
-    private PaymentService paymentService;
 
     @Mock
     private OrderTrackingService orderTrackingService;
@@ -56,19 +56,30 @@ class OrderServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private SmsService smsService;
+
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         orderService = new OrderService(
                 orderRepository,
-                productRepository,
+                productService,
                 userRepository,
                 mapService,
-                paymentService,
-                orderTrackingService,
                 cartService,
-                notificationService
+                notificationService,
+                orderTrackingService,
+                eventPublisher,
+                emailService,
+                smsService
         );
     }
 
@@ -79,11 +90,11 @@ class OrderServiceTest {
         Product product = product(10L, seller, 5, true);
         CreateOrderRequestDto request = request(2L, 10L, 2);
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(seller));
         when(mapService.calculateEstimatedRoadDistance(28.0, 77.0, 28.1, 77.1)).thenReturn(5.0);
         when(mapService.isWithinDeliveryRadius(5.0)).thenReturn(true);
-        when(productRepository.findById(10L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(10L)).thenReturn(product);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
             if (order.getId() == null) {
@@ -91,16 +102,19 @@ class OrderServiceTest {
             }
             return order;
         });
-        when(paymentService.createRazorpayOrder(BigDecimal.valueOf(200), 100L)).thenReturn("order_razorpay");
+        doAnswer(invocation -> {
+            OrderCreatedEvent event = invocation.getArgument(0);
+            event.getOrder().setRazorpayOrderId("order_razorpay");
+            return null;
+        }).when(eventPublisher).publishEvent(any(OrderCreatedEvent.class));
 
-        OrderResponseDto response = orderService.createOrder(request, "customer@example.com");
+        OrderResponseDto response = orderService.createOrder(request, 1L);
 
         assertThat(response.getId()).isEqualTo(100L);
         assertThat(response.getStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(response.getTotalAmount()).isEqualByComparingTo("200");
         assertThat(response.getRazorpayOrderId()).isEqualTo("order_razorpay");
-        verify(paymentService).createPendingPayment(any(Order.class), eq("order_razorpay"));
-        verify(notificationService).notifyUser(eq("seller@example.com"), eq("ORDER_CREATED"), any(), eq(100L));
+        verify(eventPublisher).publishEvent(any(OrderCreatedEvent.class));
         verify(orderRepository, times(2)).save(any(Order.class));
     }
 
@@ -109,10 +123,10 @@ class OrderServiceTest {
         User customer = user(1L, "Customer", "customer@example.com", Role.CUSTOMER);
         User notSeller = user(2L, "Other", "other@example.com", Role.CUSTOMER);
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(notSeller));
 
-        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), "customer@example.com"))
+        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), 1L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Target user is not a seller");
     }
@@ -124,13 +138,13 @@ class OrderServiceTest {
         User otherSeller = user(3L, "Other Seller", "other-seller@example.com", Role.SELLER);
         Product product = product(10L, otherSeller, 5, true);
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(seller));
         when(mapService.calculateEstimatedRoadDistance(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(5.0);
         when(mapService.isWithinDeliveryRadius(5.0)).thenReturn(true);
-        when(productRepository.findById(10L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(10L)).thenReturn(product);
 
-        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), "customer@example.com"))
+        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), 1L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Product 10 does not belong to the seller");
     }
@@ -140,12 +154,12 @@ class OrderServiceTest {
         User customer = user(1L, "Customer", "customer@example.com", Role.CUSTOMER);
         User seller = seller();
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(seller));
         when(mapService.calculateEstimatedRoadDistance(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(11.0);
         when(mapService.isWithinDeliveryRadius(11.0)).thenReturn(false);
 
-        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), "customer@example.com"))
+        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), 1L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Delivery address is outside the seller's delivery radius");
     }
@@ -156,13 +170,13 @@ class OrderServiceTest {
         User seller = seller();
         Product product = product(10L, seller, 5, false);
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(seller));
         when(mapService.calculateEstimatedRoadDistance(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(5.0);
         when(mapService.isWithinDeliveryRadius(5.0)).thenReturn(true);
-        when(productRepository.findById(10L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(10L)).thenReturn(product);
 
-        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), "customer@example.com"))
+        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 1), 1L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Product 10 is not available");
     }
@@ -173,13 +187,13 @@ class OrderServiceTest {
         User seller = seller();
         Product product = product(10L, seller, 1, true);
 
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(seller));
         when(mapService.calculateEstimatedRoadDistance(anyDouble(), anyDouble(), anyDouble(), anyDouble())).thenReturn(5.0);
         when(mapService.isWithinDeliveryRadius(5.0)).thenReturn(true);
-        when(productRepository.findById(10L)).thenReturn(Optional.of(product));
+        when(productService.getProductEntityById(10L)).thenReturn(product);
 
-        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 2), "customer@example.com"))
+        assertThatThrownBy(() -> orderService.createOrder(request(2L, 10L, 2), 1L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Requested quantity exceeds available stock for product 10");
     }
@@ -188,9 +202,9 @@ class OrderServiceTest {
     void updateStatusRejectsInvalidTransition() {
         Order order = order(100L, user(1L, "Customer", "customer@example.com", Role.CUSTOMER), seller(), OrderStatus.PENDING);
         when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(order));
-        when(userRepository.findByEmail("seller@example.com")).thenReturn(Optional.of(order.getSeller()));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(order.getSeller()));
 
-        assertThatThrownBy(() -> orderService.updateStatus(100L, OrderStatus.DELIVERED, "seller@example.com"))
+        assertThatThrownBy(() -> orderService.updateStatus(100L, OrderStatus.DELIVERED, 2L))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Cannot transition from PENDING to DELIVERED");
     }
@@ -201,9 +215,9 @@ class OrderServiceTest {
         User otherSeller = user(3L, "Other Seller", "other-seller@example.com", Role.SELLER);
 
         when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(order));
-        when(userRepository.findByEmail("other-seller@example.com")).thenReturn(Optional.of(otherSeller));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(otherSeller));
 
-        assertThatThrownBy(() -> orderService.updateStatus(100L, OrderStatus.CONFIRMED, "other-seller@example.com"))
+        assertThatThrownBy(() -> orderService.updateStatus(100L, OrderStatus.CONFIRMED, 3L))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("You are not authorised to update this order");
     }
@@ -212,16 +226,16 @@ class OrderServiceTest {
     void sellerCanUpdateOwnOrderStatus() {
         Order order = order(100L, user(1L, "Customer", "customer@example.com", Role.CUSTOMER), seller(), OrderStatus.PENDING);
         when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(order));
-        when(userRepository.findByEmail("seller@example.com")).thenReturn(Optional.of(order.getSeller()));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(order.getSeller()));
         when(mapService.getEstimatedDeliveryMinutes(28.0, 77.0, 28.1, 77.1)).thenReturn(35);
         when(orderRepository.save(order)).thenReturn(order);
 
-        OrderResponseDto response = orderService.updateStatus(100L, OrderStatus.CONFIRMED, "seller@example.com");
+        OrderResponseDto response = orderService.updateStatus(100L, OrderStatus.CONFIRMED, 2L);
 
         assertThat(response.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         assertThat(response.getEstimatedDeliveryMinutes()).isEqualTo(35);
         verify(orderTrackingService).broadcastStatusUpdate(100L, OrderStatus.CONFIRMED);
-        verify(notificationService).notifyUser(eq("customer@example.com"), eq("ORDER_STATUS"), any(), eq(100L));
+        verify(notificationService).notifyUser(eq(1L), eq("ORDER_STATUS"), any(), eq(100L));
     }
 
     @Test
@@ -230,9 +244,9 @@ class OrderServiceTest {
         User otherCustomer = user(4L, "Other", "other@example.com", Role.CUSTOMER);
 
         when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(order));
-        when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(otherCustomer));
+        when(userRepository.findById(4L)).thenReturn(Optional.of(otherCustomer));
 
-        assertThatThrownBy(() -> orderService.getOrderById(100L, "other@example.com"))
+        assertThatThrownBy(() -> orderService.getOrderById(100L, 4L))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("Access denied");
     }

@@ -3,7 +3,9 @@ package com.bakeaura.reel;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -17,4 +19,8 @@ public interface ReelRepository extends JpaRepository<Reel, Long> {
 
     @Query("SELECT r FROM Reel r WHERE r.status = com.bakeaura.reel.Reel.ReelStatus.ACTIVE")
     List<Reel> findBySeller_StatusActive();
+
+    @Modifying
+    @Query("UPDATE Reel r SET r.viewCount = r.viewCount + 1 WHERE r.id = :id")
+    void incrementViewCount(@Param("id") Long id);
 }

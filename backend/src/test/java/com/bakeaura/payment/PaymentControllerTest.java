@@ -64,9 +64,9 @@ class PaymentControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = "CUSTOMER")
+    @WithMockUser(username = "1", roles = "CUSTOMER")
     void authenticatedUserCanGetPaymentByOrderId() throws Exception {
-        when(paymentService.getPaymentByOrderId(1L, "customer@example.com"))
+        when(paymentService.getPaymentByOrderId(1L, 1L))
                 .thenReturn(PaymentResponseDto.builder()
                         .id(10L)
                         .orderId(1L)
@@ -83,6 +83,6 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.data.status").value("CAPTURED"))
                 .andExpect(jsonPath("$.data.razorpayOrderId").value("order_razorpay"));
 
-        verify(paymentService).getPaymentByOrderId(1L, "customer@example.com");
+        verify(paymentService).getPaymentByOrderId(1L, 1L);
     }
 }
