@@ -39,8 +39,10 @@ public class InfluencerCollaborationService {
             throw new BadRequestException("Target user is not an influencer");
         }
 
-        if (collaborationRepository.existsByInfluencerIdAndSellerId(influencerId, sellerId)) {
-            throw new BadRequestException("A collaboration request already exists between you and this influencer");
+        if (collaborationRepository.existsByInfluencerIdAndSellerIdAndStatusIn(
+                influencerId, sellerId,
+                List.of(CollaborationStatus.PENDING, CollaborationStatus.APPROVED))) {
+            throw new BadRequestException("An active collaboration request already exists with this influencer");
         }
 
         InfluencerCollaboration collaboration = new InfluencerCollaboration();
@@ -76,7 +78,8 @@ public class InfluencerCollaborationService {
         }
 
         InfluencerCollaboration collaboration = collaborationRepository
-                .findByInfluencerIdAndSellerId(influencerId, sellerId)
+                .findFirstByInfluencerIdAndSellerIdAndStatusOrderByCreatedAtDesc(
+                        influencerId, sellerId, CollaborationStatus.PENDING)
                 .orElseThrow(() -> new ResourceNotFoundException("Collaboration request not found"));
 
         if (!collaboration.getInfluencerId().equals(influencerId)) {

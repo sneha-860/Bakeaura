@@ -105,6 +105,16 @@ public class ReelService {
         reelRepository.incrementViewCount(reelId);
     }
 
+    @Transactional
+    public void incrementLikeCount(Long reelId) {
+        reelRepository.incrementLikeCount(reelId);
+    }
+
+    @Transactional
+    public void incrementSaveCount(Long reelId) {
+        reelRepository.incrementSaveCount(reelId);
+    }
+
     public List<ReelResponseDTO> getSellerReels(Long sellerId) {
         return reelRepository
                 .findBySeller_IdAndStatusOrderByCreatedAtDesc(sellerId, Reel.ReelStatus.ACTIVE)

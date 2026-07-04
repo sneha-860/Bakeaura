@@ -179,7 +179,7 @@ export default function ReelUploadPage() {
         {uploadState === "done" && (
           <div className="success-state">
             <div className="success-message">🎉 Your reel is live!</div>
-            <button onClick={() => navigate("/feed")} className="btn btn-primary">
+            <button onClick={() => navigate("/reels")} className="btn btn-primary">
               View Feed
             </button>
           </div>

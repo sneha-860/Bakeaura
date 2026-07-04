@@ -380,18 +380,11 @@ export function AdminApplicationsPage() {
   const load = () => {
     setLoading(true);
     setError(null);
-    console.log('Loading applications with status:', status);
-    console.log('Current user role:', role);
     roleApplicationsApi.adminList(status)
       .then((data) => {
-        console.log('Applications loaded:', data);
         setApplications(data);
       })
       .catch((err) => {
-        console.error('Failed to load applications:', err);
-        console.error('Error response:', err?.response);
-        console.error('Error status:', err?.response?.status);
-        console.error('Error data:', err?.response?.data);
         setError(err?.response?.data?.message || err?.message || 'Failed to load applications');
         setApplications([]);
       })

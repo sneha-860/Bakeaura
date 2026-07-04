@@ -101,7 +101,12 @@ export function OrderDetailPage() {
   }
 
   async function cancel() {
-    setOrder(await ordersApi.cancel(id));
+    try {
+      setOrder(await ordersApi.cancel(id));
+      toast.success('Order cancelled');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not cancel order');
+    }
   }
 
   async function submitReview(values) {

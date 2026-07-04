@@ -29,12 +29,31 @@ export default function ReelFeedPage() {
     }
   };
 
+  const handleLike = async (reelId) => {
+    try {
+      await reelsApi.like(reelId);
+      setReels(prev => prev.map(r => r.id === reelId ? { ...r, likeCount: r.likeCount + 1 } : r));
+    } catch (err) {
+      console.error("Like failed", err);
+    }
+  };
+
+  const handleSave = async (reelId) => {
+    try {
+      await reelsApi.save(reelId);
+      setReels(prev => prev.map(r => r.id === reelId ? { ...r, saveCount: r.saveCount + 1 } : r));
+    } catch (err) {
+      console.error("Save failed", err);
+    }
+  };
+
   const togglePlay = (reelId) => {
     const video = videoRefs.current[reelId];
     if (video) {
       if (video.paused) {
         video.play();
         setPlaying(prev => ({ ...prev, [reelId]: true }));
+        reelsApi.view(reelId).catch(() => {});
       } else {
         video.pause();
         setPlaying(prev => ({ ...prev, [reelId]: false }));
@@ -136,7 +155,7 @@ export default function ReelFeedPage() {
                 </div>
 
                 <div className="reel-actions">
-                  <button className="reel-action">
+                  <button className="reel-action" onClick={() => handleLike(reel.id)}>
                     <Heart size={20} />
                     <span>{reel.likeCount}</span>
                   </button>
@@ -144,7 +163,7 @@ export default function ReelFeedPage() {
                     <MessageCircle size={20} />
                     <span>{reel.commentCount}</span>
                   </button>
-                  <button className="reel-action">
+                  <button className="reel-action" onClick={() => handleSave(reel.id)}>
                     <Bookmark size={20} />
                     <span>{reel.saveCount}</span>
                   </button>

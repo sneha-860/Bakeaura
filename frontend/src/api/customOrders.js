@@ -1,7 +1,7 @@
 import api, { data } from './axios';
 
 export const customOrdersApi = {
-  submit: (params) => api.post('/custom-orders', null, { params }).then(data),
+  submit: (params) => api.post('/custom-orders', params).then(data),
   myRequests: () => api.get('/custom-orders/my-requests').then(data),
   sellerAll: () => api.get('/seller/custom-orders').then(data),
   sellerPending: () => api.get('/seller/custom-orders/pending').then(data),

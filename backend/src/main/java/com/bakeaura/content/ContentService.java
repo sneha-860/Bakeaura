@@ -2,8 +2,7 @@ package com.bakeaura.content;
 
 import com.bakeaura.reel.Reel;
 import com.bakeaura.reel.ReelRepository;
-import com.bakeaura.seller.SellerProfile;
-import com.bakeaura.seller.SellerProfileRepository;
+import com.bakeaura.review.ReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,12 +19,12 @@ import java.util.stream.Collectors;
 public class ContentService {
 
     private final ReelRepository reelRepository;
-    private final SellerProfileRepository sellerProfileRepository;
+    private final ReviewService reviewService;
 
     @Transactional(readOnly = true)
     public List<FeedItem> getRankedFeed() {
 
-        List<Reel> activeReels = reelRepository.findBySeller_StatusActive();
+        List<Reel> activeReels = reelRepository.findAllActive();
 
         if (activeReels.isEmpty()) {
             return List.of();
@@ -36,10 +35,10 @@ public class ContentService {
                 .distinct()
                 .collect(Collectors.toMap(
                         sellerId -> sellerId,
-                        sellerId -> sellerProfileRepository
-                                .findByUserId(sellerId)
-                                .map(SellerProfile::getAverageRating)
-                                .orElse(0.0)
+                        sellerId -> {
+                            Double avg = reviewService.getSummary(sellerId).getAverageRating();
+                            return avg != null ? avg : 0.0;
+                        }
                 ));
 
         long maxLikes = activeReels.stream()

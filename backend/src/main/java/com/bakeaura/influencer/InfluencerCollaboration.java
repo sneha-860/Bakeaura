@@ -9,10 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-        name = "influencer_collaborations",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"influencer_id", "seller_id"})
-)
+@Table(name = "influencer_collaborations")
 @Getter
 @Setter
 @NoArgsConstructor

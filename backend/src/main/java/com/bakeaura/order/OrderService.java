@@ -115,7 +115,7 @@ public class OrderService {
                 new OrderCreatedEvent(this, saved, customer.getEmail(), request.getReferralCode())
         );
 
-        return toResponse(orderRepository.save(saved));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -328,7 +328,11 @@ public class OrderService {
             throw new BadRequestException("Product " + product.getName() +
                     " is a pre-order only item and requires a scheduled order");
         }
-        if (orderType == OrderType.SCHEDULED && product.getMinAdvanceDays() != null) {
+        if (product.getMinAdvanceDays() != null && product.getMinAdvanceDays() > 0) {
+            if (orderType == OrderType.INSTANT) {
+                throw new BadRequestException("Product " + product.getName() +
+                        " requires " + product.getMinAdvanceDays() + " days advance notice and cannot be ordered instantly");
+            }
             LocalDate earliestDate = LocalDate.now().plusDays(product.getMinAdvanceDays());
             if (scheduledDeliveryDate == null || scheduledDeliveryDate.isBefore(earliestDate)) {
                 throw new BadRequestException("Product " + product.getName() +

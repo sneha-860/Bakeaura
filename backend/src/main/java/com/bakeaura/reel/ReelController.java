@@ -60,4 +60,18 @@ public class ReelController {
         reelService.incrementViewCount(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/like")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<Void> likeReel(@PathVariable Long id) {
+        reelService.incrementLikeCount(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/save")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<Void> saveReel(@PathVariable Long id) {
+        reelService.incrementSaveCount(id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -115,7 +115,7 @@ class OrderServiceTest {
         assertThat(response.getTotalAmount()).isEqualByComparingTo("200");
         assertThat(response.getRazorpayOrderId()).isEqualTo("order_razorpay");
         verify(eventPublisher).publishEvent(any(OrderCreatedEvent.class));
-        verify(orderRepository, times(2)).save(any(Order.class));
+        verify(orderRepository, times(1)).save(any(Order.class));
     }
 
     @Test

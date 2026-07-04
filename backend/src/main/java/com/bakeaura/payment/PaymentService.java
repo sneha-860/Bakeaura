@@ -163,7 +163,7 @@ public class PaymentService {
             throw new BadRequestException("Invalid payment signature");
         }
 
-        if (payment.getStatus() != PaymentStatus.CAPTURED) {
+        if (payment.getStatus() == PaymentStatus.PENDING) {
             payment.setRazorpayPaymentId(request.getRazorpayPaymentId());
             payment.setRazorpaySignature(request.getRazorpaySignature());
             payment.setStatus(PaymentStatus.CAPTURED);
@@ -221,8 +221,8 @@ public class PaymentService {
                             .build();
                 });
 
-        if (payment.getStatus() == PaymentStatus.CAPTURED) {
-            log.info("Payment {} was already captured; ignoring duplicate webhook", razorpayPaymentId);
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.info("Payment {} is in status {}; ignoring webhook", razorpayPaymentId, payment.getStatus());
             return;
         }
 

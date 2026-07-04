@@ -76,13 +76,17 @@ public class RoleApplicationService {
     }
 
     @Transactional
-    public RoleApplicationResponse approve(Long applicationId, String adminEmail, RoleApplicationReviewRequest request) {
+    public RoleApplicationResponse approve(Long applicationId, Long adminId, RoleApplicationReviewRequest request) {
         RoleApplication application = getPendingApplication(applicationId);
         User user = application.getUser();
 
         if (!Boolean.TRUE.equals(user.getIsActive())) {
             throw new BadRequestException("Cannot approve an inactive user");
         }
+
+        String adminEmail = userRepository.findById(adminId)
+                .map(User::getEmail)
+                .orElse("admin#" + adminId);
 
         user.setRole(application.getRequestedRole());
         application.setStatus(ApplicationStatus.APPROVED);
@@ -103,8 +107,12 @@ public class RoleApplicationService {
     }
 
     @Transactional
-    public RoleApplicationResponse reject(Long applicationId, String adminEmail, RoleApplicationReviewRequest request) {
+    public RoleApplicationResponse reject(Long applicationId, Long adminId, RoleApplicationReviewRequest request) {
         RoleApplication application = getPendingApplication(applicationId);
+
+        String adminEmail = userRepository.findById(adminId)
+                .map(User::getEmail)
+                .orElse("admin#" + adminId);
 
         application.setStatus(ApplicationStatus.REJECTED);
         application.setReviewNote(request.getReviewNote());

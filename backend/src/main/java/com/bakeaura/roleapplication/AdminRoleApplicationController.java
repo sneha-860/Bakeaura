@@ -35,7 +35,7 @@ public class AdminRoleApplicationController {
             @Valid @RequestBody RoleApplicationReviewRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Application approved",
-                roleApplicationService.approve(id, authentication.getName(), request)
+                roleApplicationService.approve(id, Long.parseLong(authentication.getName()), request)
         ));
     }
 
@@ -46,7 +46,7 @@ public class AdminRoleApplicationController {
             @Valid @RequestBody RoleApplicationReviewRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(
                 "Application rejected",
-                roleApplicationService.reject(id, authentication.getName(), request)
+                roleApplicationService.reject(id, Long.parseLong(authentication.getName()), request)
         ));
     }
 }
