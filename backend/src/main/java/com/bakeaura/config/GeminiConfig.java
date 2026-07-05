@@ -9,8 +9,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class GeminiConfig {
 
-    @Value("${spring.ai.google.genai.api-key}")
-    private String geminiApiKey;
+    private final String geminiApiKey;
+
+    public GeminiConfig(@Value("${spring.ai.google.genai.api-key}") String geminiApiKey) {
+        this.geminiApiKey = geminiApiKey;
+    };
 
     @Bean
     public ChatClient cakeDesignChatClient(ChatClient.Builder chatClientBuilder) {
