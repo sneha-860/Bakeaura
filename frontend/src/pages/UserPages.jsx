@@ -1,4 +1,4 @@
-import { Bell, Heart, Send } from 'lucide-react';
+import { Bell, Heart, MapPin, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -36,19 +36,36 @@ export function ProfilePage() {
   const [user, setUser] = useState(null);
   const [applications, setApplications] = useState([]);
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
+  const { setValue } = profileForm;
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
   const emailForm = useForm({ resolver: zodResolver(emailSchema) });
 
   useEffect(() => {
     usersApi.me().then((me) => {
       setUser(me);
-      profileForm.reset({ name: me.name, latitude: me.latitude || '', longitude: me.longitude || '' });
+      profileForm.reset({ name: me.name, latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
     });
   }, []);
 
   useEffect(() => {
     roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([]));
   }, []);
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      toast.error('Location access is not available in this browser');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setValue('latitude', coords.latitude);
+        setValue('longitude', coords.longitude);
+        toast.success('Location detected');
+      },
+      () => toast.error('Could not get your location — check browser permissions'),
+      { timeout: 3500 }
+    );
+  }
 
   async function updateProfile(values) {
     try {
@@ -85,19 +102,22 @@ export function ProfilePage() {
     <div className="page two-column">
       <section>
         <h1>Profile</h1>
-        <form className="form-card" onSubmit={profileForm.handleSubmit(updateProfile)}>
+        <form className="form-card compact" onSubmit={profileForm.handleSubmit(updateProfile)}>
           <Input label="Name" error={profileForm.formState.errors.name?.message} {...profileForm.register('name')} />
+          <button type="button" className="btn btn-ghost" onClick={detectLocation}>
+            <MapPin size={16} /> Use my current location
+          </button>
           <Input label="Latitude" type="number" step="any" error={profileForm.formState.errors.latitude?.message} {...profileForm.register('latitude')} />
           <Input label="Longitude" type="number" step="any" error={profileForm.formState.errors.longitude?.message} {...profileForm.register('longitude')} />
           <Button>Save profile</Button>
         </form>
-        <form className="form-card" onSubmit={passwordForm.handleSubmit(updatePassword)}>
+        <form className="form-card compact" onSubmit={passwordForm.handleSubmit(updatePassword)}>
           <h2>Change password</h2>
           <Input label="Current password" type="password" error={passwordForm.formState.errors.currentPassword?.message} {...passwordForm.register('currentPassword')} />
           <Input label="New password" type="password" error={passwordForm.formState.errors.newPassword?.message} {...passwordForm.register('newPassword')} />
           <Button variant="ghost">Update password</Button>
         </form>
-        <form className="form-card" onSubmit={emailForm.handleSubmit(requestEmailChange)}>
+        <form className="form-card compact" onSubmit={emailForm.handleSubmit(requestEmailChange)}>
           <h2>Change email</h2>
           <p className="muted">We'll send a verification link to your new address — your login email won't change until you confirm it.</p>
           <Input label="New email" type="email" error={emailForm.formState.errors.newEmail?.message} {...emailForm.register('newEmail')} />
@@ -125,9 +145,35 @@ export function ProfilePage() {
 
 export function AddressesPage() {
   const [addresses, setAddresses] = useState([]);
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema) });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema) });
   const load = () => addressesApi.list().then(setAddresses).catch(() => setAddresses([]));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
+
+  function detectLocation() {
+    if (!navigator.geolocation) {
+      toast.error('Location access is not available in this browser');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setValue('latitude', coords.latitude);
+        setValue('longitude', coords.longitude);
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}&accept-language=en`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.display_name) {
+              setValue('addressLine', data.display_name);
+            }
+            toast.success('Location detected');
+          })
+          .catch(() => {
+            toast.success('Location detected — you can type your address manually');
+          });
+      },
+      () => toast.error('Could not get your location — check browser permissions'),
+      { timeout: 3500 }
+    );
+  }
 
   async function submit(values) {
     try {
@@ -152,8 +198,11 @@ export function AddressesPage() {
 
   return (
     <div className="page two-column">
-      <section><h1>Saved addresses</h1><div className="stack">{addresses.map((address) => <AddressCard key={address.id} address={address} onDefault={setDefault} onDelete={remove} />)}{!addresses.length ? <EmptyState title="No addresses saved" /> : null}</div></section>
-      <aside><form className="form-card" onSubmit={handleSubmit(submit)}><h2>Add address</h2><Input label="Label" error={errors.label?.message} {...register('label')} /><Input label="Address line" error={errors.addressLine?.message} {...register('addressLine')} /><Input label="Latitude" type="number" step="any" error={errors.latitude?.message} {...register('latitude')} /><Input label="Longitude" type="number" step="any" error={errors.longitude?.message} {...register('longitude')} /><label className="check-row"><input type="checkbox" {...register('defaultAddress')} /> Default</label><Button>Save address</Button></form></aside>
+      <section>
+        <section className="page-hero compact-hero"><p className="eyebrow"><MapPin size={16} /> Delivery</p><h1>Saved addresses</h1></section>
+        <div className="stack">{addresses.map((address) => <AddressCard key={address.id} address={address} onDefault={setDefault} onDelete={remove} />)}{!addresses.length ? <EmptyState title="No addresses saved" /> : null}</div>
+      </section>
+      <aside><form className="form-card" onSubmit={handleSubmit(submit)}><h2>Add address</h2><button type="button" className="btn btn-ghost" onClick={detectLocation}><MapPin size={16} /> Use my current location</button><Input label="Label" error={errors.label?.message} {...register('label')} /><Input label="Address line" error={errors.addressLine?.message} {...register('addressLine')} /><Input label="Latitude" type="number" step="any" error={errors.latitude?.message} {...register('latitude')} /><Input label="Longitude" type="number" step="any" error={errors.longitude?.message} {...register('longitude')} /><label className="check-row"><input type="checkbox" {...register('defaultAddress')} /> Default</label><Button>Save address</Button></form></aside>
     </div>
   );
 }
@@ -161,7 +210,7 @@ export function AddressesPage() {
 export function FavouritesPage() {
   const [products, setProducts] = useState([]);
   const load = () => favouritesApi.list().then(setProducts).catch(() => setProducts([]));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   async function remove(product) {
     await favouritesApi.remove(product.id);
     load();
@@ -172,7 +221,7 @@ export function FavouritesPage() {
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const load = () => notificationsApi.list().then(setNotifications).catch(() => setNotifications([]));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   async function markRead(id) {
     await notificationsApi.markRead(id);
     load();
@@ -188,7 +237,7 @@ export function RoleApplicationPage() {
   const [applications, setApplications] = useState([]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(applicationSchema), defaultValues: { requestedRole: Role.SELLER } });
   const load = () => roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([]));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   async function submit(values) {
     try {

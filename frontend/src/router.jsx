@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import RequireAuth from './components/RequireAuth';
+import NotFoundPage from './pages/NotFoundPage';
 import { Role } from './api/enums';
 import HomePage from './pages/HomePage';
 import { LoginPage, RegisterPage, VerifyEmailChangePage, VerifyEmailPage } from './pages/AuthPages';
@@ -86,7 +87,8 @@ const router = createBrowserRouter([
           { path: '/admin/applications', element: <AdminApplicationsPage /> },
           { path: '/admin/payouts', element: <AdminPayoutsPage /> }
         ]
-      }
+      },
+      { path: '*', element: <NotFoundPage /> }
     ]
   }
 ]);

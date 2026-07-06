@@ -6,7 +6,6 @@ import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { collaborationsApi } from '../api/collaborations';
-import { contentApi } from '../api/content';
 import { customOrdersApi } from '../api/customOrders';
 import { Role } from '../api/enums';
 import { influencersApi } from '../api/influencers';
@@ -18,7 +17,6 @@ import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
 import Modal from '../components/Modal';
 import ProductCard from '../components/ProductCard';
-import ProductImage from '../components/ProductImage';
 import RatingStars from '../components/RatingStars';
 import { useAuthStore } from '../store/useAuthStore';
 import { formatDate, titleCase } from '../utils/format';
@@ -115,7 +113,6 @@ export function InfluencerProfilePage() {
   const { id } = useParams();
   const { role, isAuthenticated } = useAuthStore();
   const [creator, setCreator] = useState(null);
-  const [feed, setFeed] = useState([]);
   const [collabOpen, setCollabOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -123,8 +120,7 @@ export function InfluencerProfilePage() {
   useEffect(() => {
     influencersApi.get(id).then((user) => {
       setCreator(user);
-      return contentApi.feed({ q: user.name });
-    }).then(setFeed).catch(() => setFeed([]));
+    }).catch(() => {});
   }, [id]);
 
   async function sendCollaborationRequest(event) {
@@ -155,10 +151,6 @@ export function InfluencerProfilePage() {
           {isAuthenticated && role === Role.SELLER ? <Button onClick={() => setCollabOpen(true)}><Sparkles size={16} /> Request collaboration</Button> : null}
         </div>
       </section>
-      <div className="grid story-grid">
-        {feed.map((item) => <article className="story-card" key={item.id}><ProductImage src={item.imageUrl} /><div><span className="pill">{item.type}</span><h3>{item.bakerName}</h3><p>{item.caption}</p></div></article>)}
-        {!feed.length ? <EmptyState title="No creator posts found" /> : null}
-      </div>
       <Modal open={collabOpen} title={`Request a collaboration with ${creator?.name || 'this creator'}`} onClose={() => setCollabOpen(false)}>
         <form className="form-card" onSubmit={sendCollaborationRequest}>
           <Input label="Message (optional)" as="textarea" rows="4" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Tell them about your shop and what you're proposing." />

@@ -8,7 +8,6 @@ export default function ReelFeedPage() {
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [currentReelIndex, setCurrentReelIndex] = useState(0);
   const [playing, setPlaying] = useState({});
   const videoRefs = useRef({});
 
@@ -41,7 +40,7 @@ export default function ReelFeedPage() {
   const handleSave = async (reelId) => {
     try {
       await reelsApi.save(reelId);
-      setReels(prev => prev.map(r => r.id === reelId ? { ...r, saveCount: r.saveCount + 1 } : r));
+      setReels(prev => prev.map(r => r.id === reelId ? { ...r, saveCount: (r.saveCount || 0) + 1 } : r));
     } catch (err) {
       console.error("Save failed", err);
     }

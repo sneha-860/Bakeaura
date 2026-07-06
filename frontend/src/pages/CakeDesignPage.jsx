@@ -88,7 +88,7 @@ export default function CakeDesignPage() {
       setPreview(result);
       setStage(STAGE.PREVIEW);
     } catch (err) {
-      setGenError(err.message);
+      setGenError(err?.response?.data?.message || err.message || 'Generation failed');
       setStage(STAGE.COMPOSE);
     }
   }
@@ -109,7 +109,7 @@ export default function CakeDesignPage() {
       });
       setStage(STAGE.SUCCESS);
     } catch (err) {
-      setOrderError(err.message);
+      setOrderError(err?.response?.data?.message || err.message || 'Could not send request');
       setStage(STAGE.PREVIEW);
     }
   }

@@ -16,6 +16,7 @@ import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
 import ProductImage from '../components/ProductImage';
+import { useAuthStore } from '../store/useAuthStore';
 import { currency } from '../utils/format';
 
 const addressSchema = z.object({
@@ -33,13 +34,17 @@ async function enrichCart(cart) {
 }
 
 export function CartPage() {
+  const navigate = useNavigate();
+  const { setCartCount } = useAuthStore();
   const [cart, setCart] = useState(null);
   const [items, setItems] = useState([]);
 
   async function load() {
     const nextCart = await cartApi.get().catch(() => ({ items: [], totalAmount: 0 }));
     setCart(nextCart);
-    setItems(await enrichCart(nextCart));
+    const enriched = await enrichCart(nextCart);
+    setItems(enriched);
+    setCartCount(enriched.length);
   }
 
   useEffect(() => { load(); }, []);
@@ -54,7 +59,7 @@ export function CartPage() {
     load();
   }
 
-  if (!items.length) return <div className="page"><EmptyState title="Your cart is empty" text="Add a fresh bake to begin checkout." actionLabel="Browse products" onAction={() => location.assign('/products')} /></div>;
+  if (!items.length) return <div className="page"><EmptyState title="Your cart is empty" text="Add a fresh bake to begin checkout." actionLabel="Browse products" onAction={() => navigate('/products')} /></div>;
 
   return (
     <div className="page two-column">
@@ -83,17 +88,22 @@ export function CartPage() {
 
 export function CheckoutPage() {
   const navigate = useNavigate();
+  const { setCartCount } = useAuthStore();
   const [items, setItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState('');
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [referralCode, setReferralCode] = useState('');
+  const [orderType, setOrderType] = useState(OrderType.INSTANT);
+  const [scheduledDate, setScheduledDate] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema), defaultValues: { defaultAddress: true } });
 
   useEffect(() => {
     cartApi.get().then(enrichCart).then((nextItems) => {
       setItems(nextItems);
       setSelectedSeller(String(nextItems[0]?.product?.sellerId || ''));
+      const hasPreOrderOnly = nextItems.some((i) => i.product?.isPreOrderOnly);
+      if (hasPreOrderOnly) setOrderType(OrderType.SCHEDULED);
     }).catch(() => setItems([]));
     addressesApi.list().then((list) => {
       setAddresses(list);
@@ -140,13 +150,18 @@ export function CheckoutPage() {
       toast.error('Select a seller group and delivery address');
       return;
     }
+    if (orderType === OrderType.SCHEDULED && !scheduledDate) {
+      toast.error('Select a delivery date for your scheduled order');
+      return;
+    }
     try {
       const order = await ordersApi.createFromCart({
         sellerId: Number(selectedSeller),
         deliveryAddress: selectedAddress.addressLine,
         deliveryLatitude: selectedAddress.latitude,
         deliveryLongitude: selectedAddress.longitude,
-        orderType: OrderType.INSTANT,
+        orderType,
+        scheduledDeliveryDate: orderType === OrderType.SCHEDULED ? scheduledDate : undefined,
         referralCode: referralCode.trim() || undefined
       });
       const ok = await loadRazorpay();
@@ -165,8 +180,14 @@ export function CheckoutPage() {
             razorpayPaymentId: response.razorpay_payment_id,
             razorpaySignature: response.razorpay_signature
           });
+          setCartCount(0);
           toast.success('Payment verified');
           navigate(`/orders/${order.id}`);
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error('Payment was cancelled. Your order is saved — complete it from My Orders.');
+          }
         }
       };
       new window.Razorpay(options).open();
@@ -177,6 +198,8 @@ export function CheckoutPage() {
 
   if (!items.length) return <div className="page"><EmptyState title="Checkout needs cart items" /></div>;
 
+  const today = new Date().toISOString().split('T')[0];
+
   return (
     <div className="page two-column">
       <section>
@@ -186,6 +209,18 @@ export function CheckoutPage() {
           <div className="stack">
             {groups.map((group) => <label className="select-card" key={group.sellerId}><input type="radio" checked={selectedSeller === group.sellerId} onChange={() => setSelectedSeller(group.sellerId)} /> <span><strong>{group.sellerName}</strong><small>{group.items.length} items · {currency(group.total)}</small></span></label>)}
           </div>
+        </div>
+        <div className="panel">
+          <h2>Order type</h2>
+          <div className="tabs">
+            <button className={orderType === OrderType.INSTANT ? 'active' : ''} onClick={() => setOrderType(OrderType.INSTANT)} type="button">Instant</button>
+            <button className={orderType === OrderType.SCHEDULED ? 'active' : ''} onClick={() => setOrderType(OrderType.SCHEDULED)} type="button">Scheduled</button>
+          </div>
+          {orderType === OrderType.SCHEDULED && (
+            <div style={{ marginTop: 12 }}>
+              <Input label="Delivery date" type="date" min={today} value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
+            </div>
+          )}
         </div>
         <div className="panel">
           <h2>Delivery address</h2>

@@ -64,6 +64,20 @@ export default function HomePage() {
             <Link className="btn btn-light" to="/sellers">Meet local bakers</Link>
           </div>
         </div>
+        <div className="scroll-indicator" onClick={() => window.scrollTo({ top: window.innerHeight, behavior: 'smooth' })}>
+          <span>Scroll to explore</span>
+          <ChevronDown />
+        </div>
+      </section>
+
+      <section className="campaign-section">
+        <div className="campaign-copy">
+          <p className="eyebrow"><Sparkles size={16} /> AI-powered</p>
+          <h2>Describe your dream cake. Watch it come to life.</h2>
+          <p>Tell our AI what you're imagining — flavor, theme, occasion — and get an instant design brief with a generated image, sent straight to a nearby baker as a custom order request.</p>
+          <Link className="btn btn-primary" to="/design">Try the AI Cake Designer</Link>
+        </div>
+        <div className="campaign-photo" />
       </section>
 
       <section className="service-strip" aria-label="Bakeaura services">
@@ -137,10 +151,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="scroll-indicator" onClick={() => window.scrollTo({ top: window.innerHeight, behavior: 'smooth' })}>
-        <span>Scroll to explore</span>
-        <ChevronDown />
-      </div>
     </div>
   );
 }

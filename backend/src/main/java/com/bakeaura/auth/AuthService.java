@@ -60,6 +60,7 @@ public class AuthService {
                 refreshToken,
                 "Bearer",
                 savedUser.getEmail(),
+                savedUser.getName(),
                 savedUser.getRole()
         );
     }
@@ -91,6 +92,7 @@ public class AuthService {
                 refreshToken,
                 "Bearer",
                 user.getEmail(),
+                user.getName(),
                 user.getRole()
         );
     }
@@ -129,6 +131,7 @@ public class AuthService {
                 newRefreshToken,
                 "Bearer",
                 user.getEmail(),
+                user.getName(),
                 user.getRole()
         );
     }
@@ -140,7 +143,7 @@ public class AuthService {
             throw new BadRequestException("Invalid refresh token");
         }
 
-       Long userId = jwtUtil.extractUserId(refreshToken);
+        Long userId = jwtUtil.extractUserId(refreshToken);
         refreshTokenStore.revoke(userId);
     }
 

@@ -23,7 +23,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
-                                           JwtAuthFilter jwtAuthFilter) throws Exception {
+                                           JwtAuthFilter jwtAuthFilter,
+                                           JwtAuthEntryPoint jwtAuthEntryPoint) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -32,6 +33,11 @@ public class SecurityConfig {
                 .sessionManagement(s ->
                         s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // STATELESS = no sessions stored on server (JWT handles this)
+
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthEntryPoint))
+                // Forces 401 (not the Spring Security default of 403) for any unauthenticated
+                // request, so the frontend's axios interceptor can correctly detect an expired
+                // token and silently refresh it
 
                 .authorizeHttpRequests(auth -> auth
                         // Public routes — no token needed

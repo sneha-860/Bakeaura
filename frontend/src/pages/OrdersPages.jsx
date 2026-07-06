@@ -66,7 +66,7 @@ export function OrderDetailPage() {
     paymentsApi.byOrder(id).then(setPayment).catch(() => setPayment(null));
     const client = createSocketClient();
     client.onConnect = () => {
-      client.subscribe(`/topic/order/${id}`, (message) => {
+      client.subscribe(`/topic/orders/${id}`, (message) => {
         const payload = JSON.parse(message.body);
         setOrder((current) => current ? { ...current, status: payload.status } : current);
         toast(payload.message || 'Order updated');
@@ -137,7 +137,19 @@ export function OrderDetailPage() {
         <p className="eyebrow">Order #{order.id}</p>
         <h1>{order.sellerName}</h1>
         <OrderStatusBadge status={order.status} />
-        <div className="timeline">{statuses.map((status) => <span key={status} className={statuses.indexOf(status) <= statuses.indexOf(order.status) ? 'done' : ''}><CheckCircle2 size={16} />{titleCase(status)}</span>)}</div>
+        <div className="timeline">
+          {order.status === OrderStatus.CANCELLED ? (
+            <span className="done cancelled"><XCircle size={16} />Cancelled</span>
+          ) : (
+            statuses
+              .filter((s) => s !== OrderStatus.CANCELLED)
+              .map((status) => (
+                <span key={status} className={statuses.indexOf(status) <= statuses.indexOf(order.status) ? 'done' : ''}>
+                  <CheckCircle2 size={16} />{titleCase(status)}
+                </span>
+              ))
+          )}
+        </div>
         <div className="stack">{order.items?.map((item) => <article className="order-item" key={item.productId}><strong>{item.productName}</strong><span>{item.quantity} x {currency(item.priceAtPurchase)}</span><strong>{currency(item.subtotal)}</strong></article>)}</div>
         <p className="muted">Delivery: {order.deliveryAddress}</p>
         {role === Role.CUSTOMER && [OrderStatus.PENDING, OrderStatus.CONFIRMED].includes(order.status) ? <Button variant="ghost" onClick={cancel}><XCircle size={16} /> Cancel order</Button> : null}

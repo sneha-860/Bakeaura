@@ -8,7 +8,6 @@ export default function AddressCard({ address, onDefault, onDelete, selected, on
       <div>
         <h3>{address.label}</h3>
         <p>{address.addressLine}</p>
-        <small>{address.latitude}, {address.longitude}</small>
       </div>
       <div className="address-actions">
         {address.defaultAddress ? <span className="pill">Default</span> : onDefault ? <Button variant="ghost" onClick={(event) => { event.stopPropagation(); onDefault(address.id); }}><Star size={15} /> Set</Button> : null}

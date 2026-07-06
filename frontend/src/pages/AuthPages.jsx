@@ -56,7 +56,7 @@ export function LoginPage() {
         <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
         <div className="password-row">
           <Input label="Password" type={show ? 'text' : 'password'} error={errors.password?.message} {...register('password')} />
-          <button type="button" onClick={() => setShow((value) => !value)}>{show ? <EyeOff /> : <Eye />}</button>
+          <button type="button" onClick={() => setShow((value) => !value)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff /> : <Eye />}</button>
         </div>
         <Button loading={loading}>Login</Button>
         <p className="muted center">New to Bakeaura? <Link to="/register">Create an account</Link></p>
@@ -69,6 +69,8 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const { isAuthenticated, role, setAuth } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(registerSchema) });
 
   if (isAuthenticated) return <Navigate to={dashboardForRole(role)} replace />;
@@ -89,17 +91,23 @@ export function RegisterPage() {
 
   return (
     <AuthShell title="Create your Bakeaura account" subtitle="Start as a customer, then apply to sell or influence.">
-      <form className="form-card" onSubmit={handleSubmit(submit)}>
+      <form className="form-card register-form" onSubmit={handleSubmit(submit)}>
         <div className="account-path">
           <div className="path-step active"><UserPlus size={18} /><strong>Customer account</strong><span>Created immediately</span></div>
-          <div className="path-step"><Store size={18} /><strong>Seller</strong><span>Apply after signup</span></div>
-          <div className="path-step"><WandSparkles size={18} /><strong>Influencer</strong><span>Apply after signup</span></div>
+          <div className="path-step" aria-disabled="true"><Store size={18} /><strong>Seller</strong><span>Apply after signup</span></div>
+          <div className="path-step" aria-disabled="true"><WandSparkles size={18} /><strong>Influencer</strong><span>Apply after signup</span></div>
         </div>
         <p className="note">All new accounts start as customers. Seller and influencer access is granted after an application is approved.</p>
         <Input label="Name" error={errors.name?.message} {...register('name')} />
         <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
-        <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
-        <Input label="Confirm password" type="password" error={errors.confirmPassword?.message} {...register('confirmPassword')} />
+        <div className="password-row">
+          <Input label="Password" type={showPassword ? 'text' : 'password'} error={errors.password?.message} {...register('password')} />
+          <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button>
+        </div>
+        <div className="password-row">
+          <Input label="Confirm password" type={showConfirmPassword ? 'text' : 'password'} error={errors.confirmPassword?.message} {...register('confirmPassword')} />
+          <button type="button" onClick={() => setShowConfirmPassword((value) => !value)} aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>{showConfirmPassword ? <EyeOff /> : <Eye />}</button>
+        </div>
         <label className="check-row"><input type="checkbox" {...register('terms')} /> I agree to the Bakeaura terms</label>
         {errors.terms ? <small className="field-error">{errors.terms.message}</small> : null}
         <Button loading={loading}>Register</Button>
@@ -127,7 +135,7 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
         setStatus('error');
         setMessage(error?.response?.data?.message || 'This link is invalid or has expired.');
       });
-  }, [searchParams]);
+  }, [searchParams, verifyFn]);
 
   return (
     <AuthShell title={title} subtitle={subtitle}>
