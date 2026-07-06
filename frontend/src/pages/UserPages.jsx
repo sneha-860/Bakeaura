@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { addressesApi } from '../api/addresses';
 import { customOrdersApi } from '../api/customOrders';
 import { Role } from '../api/enums';
+import { useAuthStore } from '../store/useAuthStore';
 import { favouritesApi } from '../api/favourites';
 import { notificationsApi } from '../api/notifications';
 import { roleApplicationsApi } from '../api/roleApplications';
@@ -20,7 +21,7 @@ import NotificationItem from '../components/NotificationItem';
 import ProductCard from '../components/ProductCard';
 import { currency, formatDate, titleCase } from '../utils/format';
 
-const profileSchema = z.object({ name: z.string().min(2), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
+const profileSchema = z.object({ name: z.string().min(2), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits').optional().or(z.literal('')), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
 const emailSchema = z.object({ newEmail: z.string().email(), currentPassword: z.string().min(6) });
 const addressSchema = z.object({ 
@@ -33,6 +34,7 @@ const addressSchema = z.object({
 const applicationSchema = z.object({ requestedRole: z.enum([Role.SELLER, Role.INFLUENCER]), message: z.string().min(10) });
 
 export function ProfilePage() {
+  const { setName } = useAuthStore();
   const [user, setUser] = useState(null);
   const [applications, setApplications] = useState([]);
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
@@ -43,7 +45,7 @@ export function ProfilePage() {
   useEffect(() => {
     usersApi.me().then((me) => {
       setUser(me);
-      profileForm.reset({ name: me.name, latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
+      profileForm.reset({ name: me.name, phone: me.phone ?? '', latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
     });
   }, []);
 
@@ -69,7 +71,9 @@ export function ProfilePage() {
 
   async function updateProfile(values) {
     try {
-      setUser(await usersApi.updateMe(values));
+      const updated = await usersApi.updateMe(values);
+      setUser(updated);
+      setName(updated.name);
       toast.success('Profile updated');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not update profile');
@@ -104,6 +108,7 @@ export function ProfilePage() {
         <h1>Profile</h1>
         <form className="form-card compact" onSubmit={profileForm.handleSubmit(updateProfile)}>
           <Input label="Name" error={profileForm.formState.errors.name?.message} {...profileForm.register('name')} />
+          <Input label="Phone (optional)" type="tel" placeholder="10–15 digit number" error={profileForm.formState.errors.phone?.message} {...profileForm.register('phone')} />
           <button type="button" className="btn btn-ghost" onClick={detectLocation}>
             <MapPin size={16} /> Use my current location
           </button>
@@ -145,9 +150,26 @@ export function ProfilePage() {
 
 export function AddressesPage() {
   const [addresses, setAddresses] = useState([]);
+  const [editing, setEditing] = useState(null);
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema) });
   const load = () => addressesApi.list().then(setAddresses).catch(() => setAddresses([]));
   useEffect(() => { load(); }, []);
+
+  function startEdit(address) {
+    setEditing(address);
+    reset({
+      label: address.label,
+      addressLine: address.addressLine,
+      latitude: address.latitude,
+      longitude: address.longitude,
+      defaultAddress: address.defaultAddress ?? false
+    });
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    reset({ label: '', addressLine: '', latitude: '', longitude: '', defaultAddress: false });
+  }
 
   function detectLocation() {
     if (!navigator.geolocation) {
@@ -177,12 +199,18 @@ export function AddressesPage() {
 
   async function submit(values) {
     try {
-      await addressesApi.create(values);
-      reset();
-      toast.success('Address added');
+      if (editing) {
+        await addressesApi.update(editing.id, values);
+        toast.success('Address updated');
+        setEditing(null);
+      } else {
+        await addressesApi.create(values);
+        toast.success('Address added');
+      }
+      reset({ label: '', addressLine: '', latitude: '', longitude: '', defaultAddress: false });
       load();
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Could not add address');
+      toast.error(error?.response?.data?.message || `Could not ${editing ? 'update' : 'add'} address`);
     }
   }
 
@@ -192,6 +220,7 @@ export function AddressesPage() {
   }
 
   async function remove(id) {
+    if (editing?.id === id) cancelEdit();
     await addressesApi.remove(id);
     load();
   }
@@ -200,9 +229,32 @@ export function AddressesPage() {
     <div className="page two-column">
       <section>
         <section className="page-hero compact-hero"><p className="eyebrow"><MapPin size={16} /> Delivery</p><h1>Saved addresses</h1></section>
-        <div className="stack">{addresses.map((address) => <AddressCard key={address.id} address={address} onDefault={setDefault} onDelete={remove} />)}{!addresses.length ? <EmptyState title="No addresses saved" /> : null}</div>
+        <div className="stack">
+          {addresses.map((address) => (
+            <AddressCard
+              key={address.id}
+              address={address}
+              onDefault={setDefault}
+              onEdit={startEdit}
+              onDelete={remove}
+            />
+          ))}
+          {!addresses.length ? <EmptyState title="No addresses saved" /> : null}
+        </div>
       </section>
-      <aside><form className="form-card" onSubmit={handleSubmit(submit)}><h2>Add address</h2><button type="button" className="btn btn-ghost" onClick={detectLocation}><MapPin size={16} /> Use my current location</button><Input label="Label" error={errors.label?.message} {...register('label')} /><Input label="Address line" error={errors.addressLine?.message} {...register('addressLine')} /><Input label="Latitude" type="number" step="any" error={errors.latitude?.message} {...register('latitude')} /><Input label="Longitude" type="number" step="any" error={errors.longitude?.message} {...register('longitude')} /><label className="check-row"><input type="checkbox" {...register('defaultAddress')} /> Default</label><Button>Save address</Button></form></aside>
+      <aside>
+        <form className="form-card" onSubmit={handleSubmit(submit)}>
+          <h2>{editing ? 'Edit address' : 'Add address'}</h2>
+          <button type="button" className="btn btn-ghost" onClick={detectLocation}><MapPin size={16} /> Use my current location</button>
+          <Input label="Label" error={errors.label?.message} {...register('label')} />
+          <Input label="Address line" error={errors.addressLine?.message} {...register('addressLine')} />
+          <Input label="Latitude" type="number" step="any" error={errors.latitude?.message} {...register('latitude')} />
+          <Input label="Longitude" type="number" step="any" error={errors.longitude?.message} {...register('longitude')} />
+          <label className="check-row"><input type="checkbox" {...register('defaultAddress')} /> Default</label>
+          <Button>{editing ? 'Update address' : 'Save address'}</Button>
+          {editing ? <Button type="button" variant="ghost" onClick={cancelEdit}>Cancel</Button> : null}
+        </form>
+      </aside>
     </div>
   );
 }

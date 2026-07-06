@@ -117,7 +117,7 @@ export function RegisterPage() {
   );
 }
 
-function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel }) {
+function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel, onSuccess }) {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState('verifying');
   const [message, setMessage] = useState('');
@@ -130,7 +130,10 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
       return;
     }
     verifyFn(token)
-      .then(() => setStatus('success'))
+      .then(() => {
+        onSuccess?.();
+        setStatus('success');
+      })
       .catch((error) => {
         setStatus('error');
         setMessage(error?.response?.data?.message || 'This link is invalid or has expired.');
@@ -174,6 +177,7 @@ export function VerifyEmailPage() {
 }
 
 export function VerifyEmailChangePage() {
+  const { logout } = useAuthStore();
   return (
     <VerificationLanding
       title="Confirm new email"
@@ -182,6 +186,7 @@ export function VerifyEmailChangePage() {
       successMessage="Your email has been updated. Please log in again with your new email."
       successTo="/login"
       successLabel="Go to login"
+      onSuccess={logout}
     />
   );
 }

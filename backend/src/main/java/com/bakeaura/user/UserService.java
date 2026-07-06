@@ -27,6 +27,9 @@ public class UserService {
         user.setName(request.getName().trim());
         user.setLatitude(request.getLatitude());
         user.setLongitude(request.getLongitude());
+        if (request.getPhone() != null) {
+            user.setPhone(request.getPhone().isBlank() ? null : request.getPhone().trim());
+        }
         return toDto(userRepository.save(user));
     }
 
@@ -99,6 +102,7 @@ public class UserService {
                 user.getIsActive(),
                 user.getLatitude(),
                 user.getLongitude(),
+                user.getPhone(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

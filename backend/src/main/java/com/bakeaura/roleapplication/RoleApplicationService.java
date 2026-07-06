@@ -47,6 +47,9 @@ public class RoleApplicationService {
             throw new BadRequestException("Application is already pending");
         }
 
+        user.setPhone(request.getPhone().trim());
+        userRepository.save(user);
+
         RoleApplication application = new RoleApplication();
         application.setUser(user);
         application.setRequestedRole(requestedRole);

@@ -16,6 +16,9 @@ public class UserDto {
     private Boolean isActive;
     private Double latitude;
     private Double longitude;
+    private String phone;
+    private String bio;
+    private String profileImageUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

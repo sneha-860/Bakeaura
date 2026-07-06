@@ -1,6 +1,7 @@
 import { Bell, Heart, LogOut, Menu, Search, ShoppingBag, UserRound, X, ChevronDown, MapPin, ClipboardList, Sparkles } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { authApi } from '../api/auth';
 import { notificationsApi } from '../api/notifications';
 import { Role } from '../api/enums';
 import { useAuthStore } from '../store/useAuthStore';
@@ -43,6 +44,8 @@ export default function Navbar() {
     }
 
     function handleLogout() {
+        const { refreshToken } = useAuthStore.getState();
+        if (refreshToken) authApi.logout(refreshToken).catch(() => {});
         logout();
         navigate('/');
         setProfileDropdownOpen(false);

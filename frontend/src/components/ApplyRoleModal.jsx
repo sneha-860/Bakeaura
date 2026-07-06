@@ -8,6 +8,7 @@ import { Role, ApplicationStatus } from '../api/enums';
 
 export default function ApplyRoleModal({ open, onClose, onApplied }) {
   const [requestedRole, setRequestedRole] = useState(Role.SELLER);
+  const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [existing, setExisting] = useState([]);
@@ -30,10 +31,15 @@ export default function ApplyRoleModal({ open, onClose, onApplied }) {
       toast.error('You already have a pending application');
       return;
     }
+    if (!phone || !/^[0-9]{10,15}$/.test(phone)) {
+      toast.error('Enter a valid 10–15 digit phone number');
+      return;
+    }
     setLoading(true);
     try {
-      await roleApplicationsApi.create({ requestedRole, message });
+      await roleApplicationsApi.create({ requestedRole, phone, message });
       toast.success('Application submitted');
+      setPhone('');
       setMessage('');
       onApplied && onApplied();
       onClose();
@@ -59,6 +65,12 @@ export default function ApplyRoleModal({ open, onClose, onApplied }) {
               <Sparkles size={16} /> Creator
             </label>
           </div>
+        </div>
+
+        <div className="field">
+          <label className="eyebrow">Phone number <span style={{ color: 'var(--error, red)' }}>*</span></label>
+          <input className="input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10–15 digit mobile number" maxLength={15} />
+          <small className="muted">Needed so we can reach you about your application and deliveries.</small>
         </div>
 
         <div className="field">

@@ -11,6 +11,7 @@ import { OrderType } from '../api/enums';
 import { ordersApi } from '../api/orders';
 import { paymentsApi } from '../api/payments';
 import { productsApi } from '../api/products';
+import { usersApi } from '../api/users';
 import AddressCard from '../components/AddressCard';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
@@ -88,7 +89,7 @@ export function CartPage() {
 
 export function CheckoutPage() {
   const navigate = useNavigate();
-  const { setCartCount } = useAuthStore();
+  const { setCartCount, name: authName } = useAuthStore();
   const [items, setItems] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState('');
@@ -96,6 +97,8 @@ export function CheckoutPage() {
   const [referralCode, setReferralCode] = useState('');
   const [orderType, setOrderType] = useState(OrderType.INSTANT);
   const [scheduledDate, setScheduledDate] = useState('');
+  const [hasPhone, setHasPhone] = useState(true);
+  const [phoneInput, setPhoneInput] = useState('');
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(addressSchema), defaultValues: { defaultAddress: true } });
 
   useEffect(() => {
@@ -109,6 +112,7 @@ export function CheckoutPage() {
       setAddresses(list);
       setSelectedAddress(list.find((address) => address.defaultAddress) || list[0] || null);
     }).catch(() => setAddresses([]));
+    usersApi.me().then((me) => setHasPhone(Boolean(me?.phone))).catch(() => {});
   }, []);
 
   const sellerGroups = useMemo(() => {
@@ -155,6 +159,9 @@ export function CheckoutPage() {
       return;
     }
     try {
+      if (!hasPhone && phoneInput) {
+        await usersApi.updateMe({ name: authName, phone: phoneInput });
+      }
       const order = await ordersApi.createFromCart({
         sellerId: Number(selectedSeller),
         deliveryAddress: selectedAddress.addressLine,
@@ -238,6 +245,12 @@ export function CheckoutPage() {
       <aside className="summary-panel">
         <h2>Payment</h2>
         <p>Razorpay checkout opens after the backend order is created.</p>
+        {!hasPhone && (
+          <div>
+            <Input label="Phone number (for delivery updates)" type="tel" placeholder="10–15 digit number" value={phoneInput} onChange={(event) => setPhoneInput(event.target.value)} />
+            <small className="muted">Optional but recommended — your baker may need to reach you.</small>
+          </div>
+        )}
         <Input label="Referral code (optional)" placeholder="Got a code from a creator?" value={referralCode} onChange={(event) => setReferralCode(event.target.value)} />
         <Button onClick={placeOrder}><CreditCard size={17} /> Place order and pay</Button>
       </aside>

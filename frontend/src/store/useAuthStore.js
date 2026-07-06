@@ -30,7 +30,8 @@ export const useAuthStore = create(
                     isAuthenticated: false,
                     cartCount: 0
                 }),
-            setCartCount: (count) => set({ cartCount: count })
+            setCartCount: (count) => set({ cartCount: count }),
+            setName: (name) => set({ name })
         }),
         {
             name: 'bakeaura-auth',
