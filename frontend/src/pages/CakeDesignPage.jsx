@@ -252,11 +252,18 @@ function PreviewStage({ preview, orderForm, onOrder, onRetry, sellers, ordering,
 
       <div className="ai-preview-layout">
         <div>
-          <img
-            src={`data:${preview.mimeType};base64,${preview.imageBase64}`}
-            alt="AI generated cake design"
-            className="ai-preview-image"
-          />
+          {preview.imageBase64 ? (
+            <img
+              src={`data:${preview.mimeType};base64,${preview.imageBase64}`}
+              alt="AI generated cake design"
+              className="ai-preview-image"
+            />
+          ) : (
+            <div className="ai-preview-image ai-no-image">
+              <Sparkles size={32} />
+              <p>Image preview unavailable right now. Your baker's brief is ready to send.</p>
+            </div>
+          )}
           <div className="ai-brief-box">
             <strong>Baker's Brief</strong>
             {preview.designBrief}

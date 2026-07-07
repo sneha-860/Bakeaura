@@ -117,10 +117,28 @@ export function RegisterPage() {
   );
 }
 
-function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel, onSuccess }) {
+function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel, onSuccess, showResend }) {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState('verifying');
   const [message, setMessage] = useState('');
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendStatus, setResendStatus] = useState('idle');
+  const [resendMessage, setResendMessage] = useState('');
+
+  async function handleResend(e) {
+    e.preventDefault();
+    if (!resendEmail) return;
+    setResendStatus('loading');
+    setResendMessage('');
+    try {
+      await authApi.resendVerification(resendEmail);
+      setResendStatus('sent');
+      setResendMessage('If this email exists and is unverified, a new link has been sent.');
+    } catch {
+      setResendStatus('failed');
+      setResendMessage('Something went wrong. Please try again.');
+    }
+  }
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -155,6 +173,27 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
           <>
             <XCircle size={40} />
             <p className="field-error">{message}</p>
+            {showResend && resendStatus !== 'sent' ? (
+              <form onSubmit={handleResend} style={{ width: '100%', marginTop: '1rem' }}>
+                <p className="muted" style={{ marginBottom: '0.5rem' }}>Need a new link?</p>
+                <Input
+                  label="Your email address"
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  required
+                />
+                <Button loading={resendStatus === 'loading'} style={{ marginTop: '0.5rem' }}>
+                  Resend verification email
+                </Button>
+                {resendStatus === 'failed' ? (
+                  <p className="field-error" style={{ marginTop: '0.5rem' }}>{resendMessage}</p>
+                ) : null}
+              </form>
+            ) : null}
+            {showResend && resendStatus === 'sent' ? (
+              <p className="muted" style={{ marginTop: '1rem' }}>{resendMessage}</p>
+            ) : null}
             <Link className="btn btn-ghost" to="/">Back to home</Link>
           </>
         ) : null}
@@ -164,6 +203,20 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
 }
 
 export function VerifyEmailPage() {
+  const { isAuthenticated, emailVerified } = useAuthStore();
+
+  if (isAuthenticated && emailVerified) {
+    return (
+      <AuthShell title="Email verification" subtitle="Confirming your email address.">
+        <div className="form-card center">
+          <CheckCircle2 size={40} />
+          <p>Your email is already verified.</p>
+          <Link className="btn btn-primary" to="/">Go to Bakeaura</Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
   return (
     <VerificationLanding
       title="Email verification"
@@ -172,6 +225,7 @@ export function VerifyEmailPage() {
       successMessage="Your email is verified."
       successTo="/"
       successLabel="Go to Bakeaura"
+      showResend
     />
   );
 }

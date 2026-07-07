@@ -1,4 +1,4 @@
-import { Bell, Heart, MapPin, Send } from 'lucide-react';
+import { Bell, Camera, Heart, MapPin, Send, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -21,7 +21,7 @@ import NotificationItem from '../components/NotificationItem';
 import ProductCard from '../components/ProductCard';
 import { currency, formatDate, titleCase } from '../utils/format';
 
-const profileSchema = z.object({ name: z.string().min(2), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits').optional().or(z.literal('')), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
+const profileSchema = z.object({ name: z.string().min(2), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits').optional().or(z.literal('')), bio: z.string().max(500, 'Bio must be 500 characters or less').optional().or(z.literal('')), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
 const emailSchema = z.object({ newEmail: z.string().email(), currentPassword: z.string().min(6) });
 const addressSchema = z.object({ 
@@ -37,6 +37,8 @@ export function ProfilePage() {
   const { setName } = useAuthStore();
   const [user, setUser] = useState(null);
   const [applications, setApplications] = useState([]);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
   const { setValue } = profileForm;
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
@@ -45,7 +47,7 @@ export function ProfilePage() {
   useEffect(() => {
     usersApi.me().then((me) => {
       setUser(me);
-      profileForm.reset({ name: me.name, phone: me.phone ?? '', latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
+      profileForm.reset({ name: me.name, phone: me.phone ?? '', bio: me.bio ?? '', latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
     });
   }, []);
 
@@ -100,6 +102,23 @@ export function ProfilePage() {
     }
   }
 
+  async function uploadAvatar() {
+    if (!avatarFile) return;
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', avatarFile);
+      const updated = await usersApi.uploadAvatar(formData);
+      setUser(updated);
+      setAvatarFile(null);
+      toast.success('Profile photo updated');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not upload photo');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   const hasPendingApplication = applications.some((a) => a.status === 'PENDING');
 
   return (
@@ -109,6 +128,11 @@ export function ProfilePage() {
         <form className="form-card compact" onSubmit={profileForm.handleSubmit(updateProfile)}>
           <Input label="Name" error={profileForm.formState.errors.name?.message} {...profileForm.register('name')} />
           <Input label="Phone (optional)" type="tel" placeholder="10–15 digit number" error={profileForm.formState.errors.phone?.message} {...profileForm.register('phone')} />
+          <label className="field">
+            <span>Bio (optional)</span>
+            <textarea className="input" rows={3} maxLength={500} placeholder="Tell people a little about yourself..." {...profileForm.register('bio')} />
+            {profileForm.formState.errors.bio ? <small className="field-error">{profileForm.formState.errors.bio.message}</small> : null}
+          </label>
           <button type="button" className="btn btn-ghost" onClick={detectLocation}>
             <MapPin size={16} /> Use my current location
           </button>
@@ -131,8 +155,22 @@ export function ProfilePage() {
         </form>
       </section>
       <aside className="summary-panel">
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          {user?.profileImageUrl
+            ? <img src={user.profileImageUrl} alt="Profile" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', margin: '0 auto', display: 'block' }} />
+            : <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--cream-dark, #e8ddd0)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}><UserRound size={32} /></div>
+          }
+          <label style={{ display: 'inline-block', marginTop: 10, cursor: 'pointer' }}>
+            <span className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
+              <Camera size={14} /> {avatarFile ? avatarFile.name : 'Change photo'}
+            </span>
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+          </label>
+          {avatarFile ? <Button loading={avatarUploading} onClick={uploadAvatar} type="button" style={{ marginTop: 8, width: '100%' }}>Upload</Button> : null}
+        </div>
         <h2>{user?.name || 'Account'}</h2>
         <p>{user?.email}</p>
+        {user?.bio ? <p className="muted" style={{ fontSize: '0.9rem' }}>{user.bio}</p> : null}
         <span className="pill">{user?.role}</span>
         {user?.role !== Role.SELLER && user?.role !== Role.ADMIN && !hasPendingApplication && (
           <Link className="btn btn-primary" to="/apply">Apply for a role</Link>

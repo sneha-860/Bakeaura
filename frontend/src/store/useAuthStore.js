@@ -10,6 +10,7 @@ export const useAuthStore = create(
             name: null,
             role: null,
             isAuthenticated: false,
+            emailVerified: false,
             cartCount: 0,
             setAuth: (authData) =>
                 set({
@@ -18,7 +19,8 @@ export const useAuthStore = create(
                     email: authData?.email ?? null,
                     name: authData?.name ?? null,
                     role: authData?.role ?? null,
-                    isAuthenticated: Boolean(authData?.accessToken)
+                    isAuthenticated: Boolean(authData?.accessToken),
+                    emailVerified: Boolean(authData?.emailVerified)
                 }),
             logout: () =>
                 set({
@@ -28,6 +30,7 @@ export const useAuthStore = create(
                     name: null,
                     role: null,
                     isAuthenticated: false,
+                    emailVerified: false,
                     cartCount: 0
                 }),
             setCartCount: (count) => set({ cartCount: count }),
@@ -41,7 +44,8 @@ export const useAuthStore = create(
                 email: state.email,
                 name: state.name,
                 role: state.role,
-                isAuthenticated: state.isAuthenticated
+                isAuthenticated: state.isAuthenticated,
+                emailVerified: state.emailVerified
             })
         }
     )
