@@ -21,7 +21,6 @@ public class ConfirmCustomOrderDto {
     @NotBlank(message = "designBrief is required")
     private String designBrief;
 
-    @NotBlank(message = "imageBase64 is required")
     private String imageBase64;
 
     @NotBlank(message = "occasion is required")

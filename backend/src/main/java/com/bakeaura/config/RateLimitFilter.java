@@ -23,6 +23,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Map<String, Bucket> loginBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> registerBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> paymentBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> resendBuckets = new ConcurrentHashMap<>();
 
     private Bucket resolveBucket(Map<String, Bucket> buckets,
                                  String ip, long capacity, long minutes) {
@@ -56,6 +57,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         } else if (method.equals("POST") && path.startsWith("/api/payments")) {
             bucket = resolveBucket(paymentBuckets, ip, 5, 1);
+
+        } else if (method.equals("POST") && path.equals("/api/auth/resend-verification")) {
+            bucket = resolveBucket(resendBuckets, ip, 3, 15);
 
         }
 

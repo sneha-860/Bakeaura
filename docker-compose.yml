@@ -62,13 +62,16 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    # Alpine = smaller image size, same functionality
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
     networks:
       - bakeaura-network
 
 volumes:
   postgres_data:
-  # Docker manages this volume on your machine
+  redis_data:
+  # Docker manages these volumes on your machine
 
 networks:
   bakeaura-network:

@@ -1,13 +1,17 @@
 package com.bakeaura.user;
 
+import com.bakeaura.cloudinary.CloudinaryService;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import com.bakeaura.notification.EmailService;
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -16,6 +20,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final CloudinaryService cloudinaryService;
 
     public UserDto getMe(Long userId) {
         return toDto(getById(userId));
@@ -29,6 +34,9 @@ public class UserService {
         user.setLongitude(request.getLongitude());
         if (request.getPhone() != null) {
             user.setPhone(request.getPhone().isBlank() ? null : request.getPhone().trim());
+        }
+        if (request.getBio() != null) {
+            user.setBio(request.getBio().isBlank() ? null : request.getBio().trim());
         }
         return toDto(userRepository.save(user));
     }
@@ -103,9 +111,19 @@ public class UserService {
                 user.getLatitude(),
                 user.getLongitude(),
                 user.getPhone(),
+                user.getBio(),
+                user.getProfileImageUrl(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );
+    }
+
+    @Transactional
+    public UserDto uploadAvatar(Long userId, MultipartFile file) throws IOException {
+        User user = getById(userId);
+        Map<String, Object> result = cloudinaryService.uploadImage(file, "bakeaura/avatars");
+        user.setProfileImageUrl((String) result.get("secure_url"));
+        return toDto(userRepository.save(user));
     }
 
     public boolean isActiveSeller(Long userId) {

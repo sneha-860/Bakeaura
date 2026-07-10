@@ -147,7 +147,9 @@ public class ProductService {
             if (maxPrice != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("price"), maxPrice));
             }
-            predicates.add(cb.equal(root.get("isAvailable"), available == null || available));
+            if (available != null) {
+                predicates.add(cb.equal(root.get("isAvailable"), available));
+            }
 
             return cb.and(predicates.toArray(Predicate[]::new));
         }, pageable).map(this::toDto);

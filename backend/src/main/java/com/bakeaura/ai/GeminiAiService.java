@@ -1,10 +1,6 @@
 package com.bakeaura.ai;
 
 import com.bakeaura.exception.ServiceUnavailableException;
-import com.google.genai.Client;
-import com.google.genai.types.GenerateContentConfig;
-import com.google.genai.types.GenerateContentResponse;
-import com.google.genai.types.Part;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,13 +9,25 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GeminiAiService {
 
     private final ChatClient cakeDesignChatClient;
-    private final Client googleGenAiRawClient;
+
+    // Static so Lombok @RequiredArgsConstructor ignores it — initialized once, shared across all requests
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
 
     @CircuitBreaker(name = "gemini", fallbackMethod = "generateDesignBriefFallback")
     public String generateDesignBrief(String customerDescription) {
@@ -48,30 +56,34 @@ public class GeminiAiService {
         throw new ServiceUnavailableException("Our AI design assistant is temporarily unavailable. Please try again in a moment.");
     }
 
-    @CircuitBreaker(name = "gemini", fallbackMethod = "generateCakeImageFallback")
+    // Uses Pollinations AI — free, no API key needed, generates real AI cake images via the Flux model.
+    // Gracefully returns null data if Pollinations is unreachable; frontend handles null by showing a text-only state.
     public CakeImageResult generateCakeImage(String designBrief) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .responseModalities("TEXT", "IMAGE")
-                .build();
+        try {
+            // Keep the prompt concise — very long URLs can cause issues; 300 chars is enough for good image generation
+            String truncated = designBrief.length() > 300 ? designBrief.substring(0, 300) : designBrief;
+            String prompt = "Professional bakery photography, custom cake: " + truncated;
+            String encodedPrompt = URLEncoder.encode(prompt, StandardCharsets.UTF_8);
+            String url = "https://image.pollinations.ai/prompt/" + encodedPrompt
+                    + "?width=512&height=512&nologo=true&model=flux";
 
-        GenerateContentResponse response = googleGenAiRawClient.models.generateContent(
-                "gemini-2.5-flash-image",
-                "A professional, appetizing photo of this custom cake design: " + designBrief,
-                config
-        );
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .GET()
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
 
-        for (Part part : response.parts()) {
-            if (part.inlineData().isPresent() && part.inlineData().get().data().isPresent()) {
-                String mime = part.inlineData().get().mimeType().orElse("image/png");
-                return new CakeImageResult(part.inlineData().get().data().get(), mime);
+            HttpResponse<byte[]> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+
+            if (response.statusCode() == 200 && response.body() != null && response.body().length > 0) {
+                log.info("Pollinations AI image generated successfully ({} bytes)", response.body().length);
+                return new CakeImageResult(response.body(), "image/jpeg");
             }
+
+            log.warn("Pollinations AI returned status {} — falling back to text-only preview", response.statusCode());
+        } catch (Exception e) {
+            log.warn("Image generation via Pollinations AI failed: {} — returning text-only preview", e.getMessage());
         }
-
-        throw new ServiceUnavailableException("Gemini did not return an image for this cake design. Please try again.");
-    }
-
-    public CakeImageResult generateCakeImageFallback(String designBrief, Throwable t) {
-        log.error("Gemini circuit breaker triggered for image generation. Cause: {}", t.getMessage());
-        throw new ServiceUnavailableException("Our AI design assistant is temporarily unavailable. Please try again in a moment.");
+        return new CakeImageResult(null, null);
     }
 }

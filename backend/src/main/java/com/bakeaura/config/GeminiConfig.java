@@ -1,19 +1,11 @@
 package com.bakeaura.config;
 
-import com.google.genai.Client;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class GeminiConfig {
-
-    private final String geminiApiKey;
-
-    public GeminiConfig(@Value("${spring.ai.google.genai.api-key}") String geminiApiKey) {
-        this.geminiApiKey = geminiApiKey;
-    };
 
     @Bean
     public ChatClient cakeDesignChatClient(ChatClient.Builder chatClientBuilder) {
@@ -26,13 +18,6 @@ public class GeminiConfig {
                         Ask a clarifying question only if occasion, servings, flavor, or budget is missing.
                         Keep the brief concise and written for the baker, not the customer.
                         """)
-                .build();
-    }
-
-    @Bean
-    public Client googleGenAiRawClient() {
-        return Client.builder()
-                .apiKey(geminiApiKey)
                 .build();
     }
 }

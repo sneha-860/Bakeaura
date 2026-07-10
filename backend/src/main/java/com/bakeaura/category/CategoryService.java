@@ -18,7 +18,6 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final ProductService productService;
 
-    @Cacheable(value = "categories", key = "'all'")
     public List<CategoryResponseDto> getAllCategories() {
         return categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()
@@ -72,6 +71,18 @@ public class CategoryService {
         }
 
         categoryRepository.delete(category);
+    }
+
+    /**
+     * Evicts all entries from the categories cache without modifying data.
+     * Called by the admin cache-evict endpoint when a direct SQL insert or
+     * external seed script has written to the categories table, bypassing
+     * the normal service layer and leaving Redis holding stale data.
+     */
+    @CacheEvict(value = "categories", allEntries = true)
+    public void evictCategoriesCache() {
+        // Body intentionally empty. The @CacheEvict interceptor fires on method
+        // entry via Spring AOP proxy and clears all "categories" cache entries.
     }
 
     public long countCategories() {

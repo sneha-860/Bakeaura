@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/users")
@@ -34,6 +36,16 @@ public class UserController {
             @Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(Long.parseLong(authentication.getName()), request);
         return ResponseEntity.ok(ApiResponse.ok("Password changed", null));
+    }
+
+    @PostMapping("/me/avatar")
+    public ResponseEntity<ApiResponse<UserDto>> uploadAvatar(
+            Authentication authentication,
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Avatar updated",
+                userService.uploadAvatar(Long.parseLong(authentication.getName()), file)
+        ));
     }
 
     @PostMapping("/me/change-email")

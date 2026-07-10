@@ -41,14 +41,19 @@ public class CakeDesignAssistantService {
         }
 
         CakeImageResult imageResult = geminiAiService.generateCakeImage(designBrief);
-        String imageBase64 = Base64.getEncoder().encodeToString(imageResult.data());
+        String imageBase64 = imageResult.data() != null
+                ? Base64.getEncoder().encodeToString(imageResult.data())
+                : null;
 
         return new CakeDesignPreviewResponseDto(designBrief, imageBase64, imageResult.mimeType());
     }
 
     public CustomOrderRequest confirmAndSubmit(Long customerId, ConfirmCustomOrderDto dto) {
-        byte[] imageBytes = Base64.getDecoder().decode(dto.getImageBase64());
-        String imageUrl = uploadGeneratedImage(imageBytes);
+        String imageUrl = null;
+        if (dto.getImageBase64() != null && !dto.getImageBase64().isBlank()) {
+            byte[] imageBytes = Base64.getDecoder().decode(dto.getImageBase64());
+            imageUrl = uploadGeneratedImage(imageBytes);
+        }
 
         CustomOrderRequest result = customOrderRequestService.submitAiGeneratedRequest(
                 customerId,

@@ -53,4 +53,10 @@ public class AuthController {
         userService.confirmEmailChange(token);
         return ResponseEntity.ok(ApiResponse.ok("Email updated successfully", null));
     }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        authService.resendVerificationEmail(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.ok("If this email exists and is unverified, a new link has been sent.", null));
+    }
 }

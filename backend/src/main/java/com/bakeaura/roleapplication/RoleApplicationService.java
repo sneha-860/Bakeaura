@@ -32,6 +32,10 @@ public class RoleApplicationService {
         User user = getActiveUserById(userId);
         Role requestedRole = request.getRequestedRole();
 
+        if (!Boolean.TRUE.equals(user.getIsEmailVerified())) {
+            throw new BadRequestException("Please verify your email address before applying for a role");
+        }
+
         if (requestedRole != Role.SELLER && requestedRole != Role.INFLUENCER) {
             throw new BadRequestException("Only SELLER or INFLUENCER applications are allowed");
         }

@@ -7,6 +7,7 @@ import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,8 @@ import java.util.UUID;
 
 
 @Service
-@RequiredArgsConstructor    //Any field marked final gets included in the constructor automatically.
+@RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final EmailService emailService;
@@ -61,7 +63,8 @@ public class AuthService {
                 "Bearer",
                 savedUser.getEmail(),
                 savedUser.getName(),
-                savedUser.getRole()
+                savedUser.getRole(),
+                Boolean.TRUE.equals(savedUser.getIsEmailVerified())
         );
     }
 
@@ -93,7 +96,8 @@ public class AuthService {
                 "Bearer",
                 user.getEmail(),
                 user.getName(),
-                user.getRole()
+                user.getRole(),
+                Boolean.TRUE.equals(user.getIsEmailVerified())
         );
     }
 
@@ -132,7 +136,8 @@ public class AuthService {
                 "Bearer",
                 user.getEmail(),
                 user.getName(),
-                user.getRole()
+                user.getRole(),
+                Boolean.TRUE.equals(user.getIsEmailVerified())
         );
     }
 
@@ -159,5 +164,24 @@ public class AuthService {
         user.setEmailVerificationToken(null);
         user.setEmailVerificationTokenExpiry(null);
         userRepository.save(user);
+    }
+
+    @Transactional
+    public void resendVerificationEmail(String email) {
+        log.info("Resend verification requested for: {}", email);
+        userRepository.findByEmail(email).ifPresent(user -> {
+            if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
+                log.info("Resend skipped — account already verified: {}", email);
+                return;
+            }
+            String token = UUID.randomUUID().toString();
+            user.setEmailVerificationToken(token);
+            user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+            userRepository.save(user);
+            log.info("New verification token saved for: {}", email);
+            emailService.sendVerificationEmail(user.getEmail(), token);
+            log.info("Verification email dispatched for: {}", email);
+        });
+        log.info("Resend handler complete for: {}", email);
     }
 }
