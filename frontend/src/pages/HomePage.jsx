@@ -1,4 +1,4 @@
-import { ArrowRight, MapPin, ShieldCheck, Sparkles, Truck, ChevronDown } from 'lucide-react';
+import { ArrowRight, MapPin, ShieldCheck, Sparkles, Star, Truck, ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { categoriesApi } from '../api/categories';
@@ -112,26 +112,48 @@ export default function HomePage() {
         <div className="campaign-copy">
           <p className="eyebrow">Seasonal counter</p>
           <h2>Build a bakery run around what is fresh today.</h2>
-          <p>Use product filters for category, availability, seller, and price. Bakeaura keeps the frontend tied to live backend products instead of hardcoded menus.</p>
+          <p>Browse everything available right now, filtered by what you're craving, your budget, and bakers near you.</p>
           <Link className="btn btn-primary" to="/products">Browse the counter</Link>
         </div>
         <div className="campaign-photo" />
       </section>
 
-      <section className="section split-section">
-        <div>
-          <p className="eyebrow"><MapPin size={16} /> Nearby bakers</p>
-          <h2>Order from sellers close to you</h2>
-          <p className="muted">When location is available, Bakeaura uses the backend nearby sellers endpoint. Otherwise it shows all active bakers.</p>
+      <section className="section">
+        <div className="section-head">
+          <div><p className="eyebrow"><MapPin size={16} /> Nearby bakers</p><h2>Order from sellers close to you</h2></div>
+          <Link to="/sellers">See all bakers</Link>
         </div>
-        <div className="seller-list">
+        <div className="sellers-grid">
           {state.sellers.slice(0, 4).map((seller) => (
-            <Link className="seller-row" key={seller.id} to={`/sellers/${seller.id}`}>
-              <span className="avatar">{seller.name?.charAt(0) || 'B'}</span>
-              <span><strong>{seller.name}</strong><small>{seller.productCount || 0} products</small></span>
-              <ArrowRight size={16} />
+            <Link className="seller-card" key={seller.id} to={`/sellers/${seller.id}`}>
+              <div className="seller-card-banner">
+                {seller.bannerImageUrl
+                  ? <img src={seller.bannerImageUrl} alt={seller.shopName || seller.name} />
+                  : <div className="seller-card-banner-placeholder" />}
+                {seller.isOpen != null
+                  ? <span className={`pill seller-card-status${seller.isOpen ? ' success' : ''}`}>{seller.isOpen ? 'Open' : 'Closed'}</span>
+                  : null}
+              </div>
+              <div className="seller-card-body">
+                <div className="seller-card-top">
+                  <span className="avatar">{(seller.shopName || seller.name)?.charAt(0) || 'B'}</span>
+                  <div className="seller-card-names">
+                    <strong>{seller.shopName || seller.name}</strong>
+                    {seller.shopName ? <small>{seller.name}</small> : null}
+                  </div>
+                </div>
+                {seller.shopBio ? <p className="seller-card-bio">{seller.shopBio}</p> : null}
+                {seller.averageRating > 0 ? (
+                  <div className="seller-card-rating"><Star size={12} /><span>{seller.averageRating.toFixed(1)}</span></div>
+                ) : null}
+                <div className="seller-card-tags">
+                  <span className="pill">{seller.productCount || 0} products</span>
+                  {seller.deliveryRadiusKm ? <span className="pill">{seller.deliveryRadiusKm} km radius</span> : null}
+                </div>
+              </div>
             </Link>
           ))}
+          {!state.sellers.length ? <EmptyState title="No nearby sellers found" /> : null}
         </div>
       </section>
 

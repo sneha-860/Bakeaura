@@ -1,4 +1,4 @@
-import { MapPin, Sparkles, UsersRound } from 'lucide-react';
+import { MapPin, Sparkles, Star, UsersRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { collaborationsApi } from '../api/collaborations';
+import { contentApi } from '../api/content';
 import { customOrdersApi } from '../api/customOrders';
 import { Role } from '../api/enums';
 import { influencersApi } from '../api/influencers';
@@ -17,6 +18,7 @@ import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
 import Modal from '../components/Modal';
 import ProductCard from '../components/ProductCard';
+import ProductImage from '../components/ProductImage';
 import RatingStars from '../components/RatingStars';
 import { useAuthStore } from '../store/useAuthStore';
 import { formatDate, titleCase } from '../utils/format';
@@ -35,7 +37,46 @@ const customOrderSchema = z.object({
 export function SellersPage() {
   const [sellers, setSellers] = useState([]);
   useEffect(() => { sellersApi.list().then(setSellers).catch(() => setSellers([])); }, []);
-  return <Directory title="Local bakers" eyebrow="Sellers" icon={<MapPin size={16} />}>{sellers.map((seller) => <Link className="person-card" key={seller.id} to={`/sellers/${seller.id}`}><span className="avatar">{seller.name?.charAt(0)}</span><strong>{seller.name}</strong><small>{seller.productCount || 0} products</small></Link>)}</Directory>;
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero">
+        <p className="eyebrow"><MapPin size={16} /> Sellers</p>
+        <h1>Local bakers</h1>
+      </section>
+      <div className="sellers-grid">
+        {sellers.map((seller) => (
+          <Link className="seller-card" key={seller.id} to={`/sellers/${seller.id}`}>
+            <div className="seller-card-banner">
+              {seller.bannerImageUrl
+                ? <img src={seller.bannerImageUrl} alt={seller.shopName || seller.name} />
+                : <div className="seller-card-banner-placeholder" />}
+              {seller.isOpen != null
+                ? <span className={`pill seller-card-status${seller.isOpen ? ' success' : ''}`}>{seller.isOpen ? 'Open' : 'Closed'}</span>
+                : null}
+            </div>
+            <div className="seller-card-body">
+              <div className="seller-card-top">
+                <span className="avatar">{(seller.shopName || seller.name)?.charAt(0)}</span>
+                <div className="seller-card-names">
+                  <strong>{seller.shopName || seller.name}</strong>
+                  {seller.shopName ? <small>{seller.name}</small> : null}
+                </div>
+              </div>
+              {seller.shopBio ? <p className="seller-card-bio">{seller.shopBio}</p> : null}
+              {seller.averageRating > 0 ? (
+                <div className="seller-card-rating"><Star size={12} /><span>{seller.averageRating.toFixed(1)}</span></div>
+              ) : null}
+              <div className="seller-card-tags">
+                <span className="pill">{seller.productCount || 0} products</span>
+                {seller.deliveryRadiusKm ? <span className="pill">{seller.deliveryRadiusKm} km radius</span> : null}
+              </div>
+            </div>
+          </Link>
+        ))}
+        {!sellers.length ? <EmptyState title="No sellers found" /> : null}
+      </div>
+    </div>
+  );
 }
 
 export function SellerStorefrontPage() {

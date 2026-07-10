@@ -71,6 +71,7 @@ export function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState(null);
   const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(registerSchema) });
 
   if (isAuthenticated) return <Navigate to={dashboardForRole(role)} replace />;
@@ -80,13 +81,25 @@ export function RegisterPage() {
     try {
       const data = await authApi.register({ name: values.name, email: values.email, password: values.password });
       setAuth(data);
-      toast.success('Account created');
-      navigate('/');
+      setRegisteredEmail(values.email);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
+  }
+
+  if (registeredEmail) {
+    return (
+      <AuthShell title="Check your inbox" subtitle="One step left — verify your email to activate your account.">
+        <div className="form-card center">
+          <CheckCircle2 size={40} color="var(--sienna)" />
+          <p>We sent a verification link to <strong>{registeredEmail}</strong>. Click it to activate your account.</p>
+          <p className="muted" style={{ fontSize: '0.88rem' }}>Can't find it? Check your spam folder. The link expires in 24 hours.</p>
+          <Button onClick={() => navigate('/')}>Continue to Bakeaura</Button>
+        </div>
+      </AuthShell>
+    );
   }
 
   return (
@@ -203,7 +216,7 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
 }
 
 export function VerifyEmailPage() {
-  const { isAuthenticated, emailVerified } = useAuthStore();
+  const { isAuthenticated, emailVerified, setEmailVerified } = useAuthStore();
 
   if (isAuthenticated && emailVerified) {
     return (
@@ -222,9 +235,10 @@ export function VerifyEmailPage() {
       title="Email verification"
       subtitle="Confirming your email address."
       verifyFn={authApi.verifyEmail}
-      successMessage="Your email is verified."
+      successMessage="Your email is verified. You can now place orders and apply for roles."
       successTo="/"
       successLabel="Go to Bakeaura"
+      onSuccess={setEmailVerified}
       showResend
     />
   );

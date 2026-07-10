@@ -18,12 +18,17 @@ export default function ProductDetailPage() {
   const { id } = useParams();
   const { role, isAuthenticated } = useAuthStore();
   const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [sellerSummary, setSellerSummary] = useState(null);
   const [favorite, setFavorite] = useState(false);
 
   useEffect(() => {
-    productsApi.get(id).then(setProduct).catch(() => setProduct(null));
+    setLoading(true);
+    productsApi.get(id)
+      .then(setProduct)
+      .catch(() => setProduct(null))
+      .finally(() => setLoading(false));
     if (isAuthenticated) favouritesApi.check(id).then((res) => setFavorite(Boolean(res?.favorite))).catch(() => {});
   }, [id, isAuthenticated]);
 
@@ -50,6 +55,7 @@ export default function ProductDetailPage() {
     }
   }
 
+  if (loading) return <div className="page" style={{ paddingTop: 80, textAlign: 'center' }}><p className="muted">Loading product…</p></div>;
   if (!product) return <div className="page"><EmptyState title="Product unavailable" /></div>;
 
   return (

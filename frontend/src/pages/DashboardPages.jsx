@@ -1,4 +1,4 @@
-import { Package, ShoppingBag, Users } from 'lucide-react';
+import { Package, ShoppingBag, Tag, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
@@ -42,6 +42,12 @@ const payoutSchema = z.object({
   upiId: z.string().min(3).max(100)
 });
 
+const categorySchema = z.object({
+  name: z.string().min(2).max(100),
+  description: z.string().max(500).or(z.literal('')).optional(),
+  imageUrl: z.string().url().or(z.literal('')).optional()
+});
+
 const shopProfileSchema = z.object({
   shopName: z.string().max(150),
   shopBio: z.string().max(1000),
@@ -76,7 +82,7 @@ export function SellerDashboardPage() {
         loadShopProfile(user.id);
       })
       .catch(() => toast.error('Could not load your profile'));
-    ordersApi.sellerOrders().then(setOrders).catch(() => setOrders([]));
+    ordersApi.sellerOrders().then((page) => setOrders(page?.content || [])).catch(() => setOrders([]));
   }, []);
 
   async function saveShopProfile(values) {
@@ -110,10 +116,12 @@ export function SellerDashboardPage() {
 
   return (
     <div className="page">
-      <section className="page-hero compact-hero">
-        <p className="eyebrow">Seller Studio</p>
-        <h1>{me?.name || 'Seller dashboard'}</h1>
-        <div className="hero-actions">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Seller Studio</p>
+          <h1>{me?.name || 'Your shop'}</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {shopProfile ? (
             <>
               <span className={`pill ${shopProfile.isOpen ? 'success' : 'danger'}`}>{shopProfile.isOpen ? 'Shop open' : 'Shop closed'}</span>
@@ -121,23 +129,37 @@ export function SellerDashboardPage() {
             </>
           ) : null}
           <Link className="btn btn-ghost" to="/seller/analytics">Analytics</Link>
+          <Link className="btn btn-primary" to="/seller/products">Manage products</Link>
         </div>
-      </section>
-      <Stats cards={[['Products', products.length, <Package />], ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />], ['Delivered revenue', currency(gross), <Users />]]} />
-      <section className="section two-column">
+      </div>
+
+      <Stats cards={[
+        ['Products', products.length, <Package />],
+        ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />],
+        ['Delivered revenue', currency(gross), <Users />]
+      ]} />
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+        <Link className="btn btn-ghost" style={{ fontSize: '0.85rem', minHeight: 36, padding: '8px 16px' }} to="/seller/orders">All orders</Link>
+        <Link className="btn btn-ghost" style={{ fontSize: '0.85rem', minHeight: 36, padding: '8px 16px' }} to="/seller/custom-orders">Custom requests</Link>
+        <Link className="btn btn-ghost" style={{ fontSize: '0.85rem', minHeight: 36, padding: '8px 16px' }} to="/seller/collaborations">Collaborations</Link>
+        <Link className="btn btn-ghost" style={{ fontSize: '0.85rem', minHeight: 36, padding: '8px 16px' }} to="/reels/upload">Upload reel</Link>
+      </div>
+
+      <div className="two-column">
         <div>
-          <h2>Recent orders</h2>
+          <h2 style={{ fontSize: '1.25rem' }}>Recent orders</h2>
           <OrderList orders={orders.slice(0, 5)} />
         </div>
         <form className="form-card" onSubmit={shopForm.handleSubmit(saveShopProfile)}>
-          <h2>Shop profile</h2>
+          <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
           <Input label="Shop name" error={shopForm.formState.errors.shopName?.message} {...shopForm.register('shopName')} />
-          <Input label="Shop bio" as="textarea" rows="4" error={shopForm.formState.errors.shopBio?.message} {...shopForm.register('shopBio')} />
+          <Input label="Shop bio" as="textarea" rows="3" error={shopForm.formState.errors.shopBio?.message} {...shopForm.register('shopBio')} />
           <Input label="Delivery radius (km)" type="number" step="0.1" error={shopForm.formState.errors.deliveryRadiusKm?.message} {...shopForm.register('deliveryRadiusKm')} />
           <Input label="Banner image URL" error={shopForm.formState.errors.bannerImageUrl?.message} {...shopForm.register('bannerImageUrl')} />
           <Button>Save shop profile</Button>
         </form>
-      </section>
+      </div>
     </div>
   );
 }
@@ -188,25 +210,33 @@ export function MyProductsPage() {
 
   return (
     <>
-      <div className="page two-column">
-        <section>
-          <h1>My products</h1>
-          <div className="grid product-grid">
-            {products.map((product) => (
-              <div key={product.id}>
-                <ProductCard product={product} />
-                <div className="card-actions">
-                  <Button variant="ghost" onClick={() => edit(product)}>Edit</Button>
-                  <Button variant="ghost" onClick={() => setDeleteTarget(product)}>Delete</Button>
-                </div>
-              </div>
-            ))}
-            {!products.length ? <EmptyState title="No products yet" /> : null}
+      <div className="page">
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">Seller Studio</p>
+            <h1>My products</h1>
           </div>
-        </section>
-        <aside>
-          <ProductForm form={form} categories={categories} onSubmit={submit} editing={editing} onCancel={() => { setEditing(null); form.reset(); }} />
-        </aside>
+          <Link className="btn btn-ghost" to="/seller">Back to Studio</Link>
+        </div>
+        <div className="two-column">
+          <section>
+            <div className="grid product-grid">
+              {products.map((product) => (
+                <div key={product.id}>
+                  <ProductCard product={product} />
+                  <div className="card-actions">
+                    <Button variant="ghost" onClick={() => edit(product)}>Edit</Button>
+                    <Button variant="ghost" onClick={() => setDeleteTarget(product)}>Delete</Button>
+                  </div>
+                </div>
+              ))}
+              {!products.length ? <EmptyState title="No products yet" /> : null}
+            </div>
+          </section>
+          <aside>
+            <ProductForm form={form} categories={categories} onSubmit={submit} editing={editing} onCancel={() => { setEditing(null); form.reset(); }} />
+          </aside>
+        </div>
       </div>
       <Modal open={Boolean(deleteTarget)} title="Delete product" onClose={() => setDeleteTarget(null)}>
         <div className="form-card">
@@ -224,7 +254,7 @@ export function MyProductsPage() {
 export function IncomingOrdersPage() {
   const [status, setStatus] = useState('');
   const [orders, setOrders] = useState([]);
-  const load = () => ordersApi.sellerOrders(status).then(setOrders).catch(() => setOrders([]));
+  const load = () => ordersApi.sellerOrders(status).then((page) => setOrders(page?.content || [])).catch(() => setOrders([]));
   useEffect(() => { load(); }, [status]);
 
   async function update(id, nextStatus) {
@@ -372,10 +402,11 @@ export function AdminDashboardPage() {
     { label: 'Categories', value: dashboard?.categories || 0, icon: <Package size={24} />, color: '#ec4899' }
   ];
 
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="stats-grid">{statCards.map((card) => <article className="stat-card" key={card.label} style={{ borderColor: card.color }}><span style={{ color: card.color }}>{card.icon}</span><strong>{card.value}</strong><small>{card.label}</small></article>)}</div><section className="section"><h2>Quick Actions</h2><div className="action-grid"><Link to="/admin/users" className="action-card"><Users size={32} /><span>Manage Users</span></Link><Link to="/admin/applications" className="action-card"><Package size={32} /><span>Review Applications</span></Link></div></section></div>;
+  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="stats-grid">{statCards.map((card) => <article className="stat-card" key={card.label} style={{ borderColor: card.color }}><span style={{ color: card.color }}>{card.icon}</span><strong>{card.value}</strong><small>{card.label}</small></article>)}</div><section className="section"><h2>Quick Actions</h2><div className="action-grid"><Link to="/admin/users" className="action-card"><Users size={32} /><span>Manage Users</span></Link><Link to="/admin/applications" className="action-card"><Package size={32} /><span>Review Applications</span></Link><Link to="/admin/categories" className="action-card"><Tag size={32} /><span>Manage Categories</span></Link><Link to="/admin/payouts" className="action-card"><ShoppingBag size={32} /><span>Influencer Payouts</span></Link></div></section></div>;
 }
 
 export function AdminUsersPage() {
+  const { email: myEmail } = useAuthStore();
   const [role, setRole] = useState('');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -466,13 +497,13 @@ export function AdminUsersPage() {
           <div className="table-list">
             {users.map((user) => (
               <article className="table-row" key={user.id}>
-                <div><strong>{user.name}</strong><small>{user.email}</small></div>
-                <select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)} disabled={actionLoading === user.id}>
+                <div style={{ display: 'grid', gap: '2px' }}><strong>{user.name}</strong><small style={{ color: 'var(--ink-soft)' }}>{user.email}{user.email === myEmail ? <span className="pill" style={{ marginLeft: 6, fontSize: '0.7rem' }}>You</span> : null}</small></div>
+                <select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)} disabled={actionLoading === user.id || user.email === myEmail}>
                   {Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
                 <span className={`pill ${user.isActive ? 'success' : 'danger'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
-                <Button variant="ghost" onClick={() => toggle(user)} disabled={actionLoading === user.id}>{actionLoading === user.id ? '...' : (user.isActive ? 'Deactivate' : 'Activate')}</Button>
-                <Button variant="ghost" onClick={() => remove(user.id)} disabled={actionLoading === user.id}>{actionLoading === user.id ? '...' : 'Delete'}</Button>
+                <Button variant="ghost" onClick={() => toggle(user)} disabled={actionLoading === user.id || user.email === myEmail}>{actionLoading === user.id ? '...' : (user.isActive ? 'Deactivate' : 'Activate')}</Button>
+                <Button variant="ghost" onClick={() => remove(user.id)} disabled={actionLoading === user.id || user.email === myEmail}>{actionLoading === user.id ? '...' : 'Delete'}</Button>
               </article>
             ))}
             {!users.length ? <EmptyState title="No users found" /> : null}
@@ -493,7 +524,6 @@ export function AdminUsersPage() {
 }
 
 export function AdminApplicationsPage() {
-  const { role } = useAuthStore();
   const [status, setStatus] = useState(ApplicationStatus.PENDING);
   const [applications, setApplications] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -516,7 +546,7 @@ export function AdminApplicationsPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [status, role]);
+  useEffect(load, [status]);
 
   async function review(action) {
     setActionLoading(true);
@@ -551,7 +581,8 @@ export function AdminApplicationsPage() {
                 <span className="pill">{app.status}</span>
                 <h3>{app.userName} wants {titleCase(app.requestedRole)}</h3>
                 <p>{app.message}</p>
-                <Button onClick={() => setSelected(app)}>Review</Button>
+                {app.status === ApplicationStatus.PENDING ? <Button onClick={() => setSelected(app)}>Review</Button> : null}
+                {app.reviewNote ? <small className="muted">Note: {app.reviewNote}</small> : null}
               </article>
             ))}
             {!applications.length ? <EmptyState title="No applications" /> : null}
@@ -891,10 +922,132 @@ export function InfluencerWalletPage() {
   );
 }
 
+export function AdminCategoriesPage() {
+  const [categories, setCategories] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const form = useForm({ resolver: zodResolver(categorySchema) });
+
+  const load = () => categoriesApi.list().then(setCategories).catch(() => setCategories([]));
+  useEffect(() => { load(); }, []);
+
+  async function submit(values) {
+    try {
+      editing
+        ? await categoriesApi.update(editing.id, values)
+        : await categoriesApi.create(values);
+      toast.success(editing ? 'Category updated' : 'Category created');
+      setEditing(null);
+      form.reset({ name: '', description: '', imageUrl: '' });
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not save category');
+    }
+  }
+
+  function edit(category) {
+    setEditing(category);
+    form.reset({ name: category.name, description: category.description || '', imageUrl: category.imageUrl || '' });
+  }
+
+  async function confirmDelete() {
+    try {
+      await categoriesApi.remove(deleteTarget.id);
+      toast.success('Category deleted');
+      setDeleteTarget(null);
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not delete category');
+      setDeleteTarget(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="page two-column">
+        <section>
+          <p className="eyebrow">Admin</p>
+          <h1>Categories</h1>
+          <div className="category-grid">
+            {categories.map((cat) => (
+              <article className="cat-card" key={cat.id}>
+                {cat.imageUrl ? <img src={cat.imageUrl} alt={cat.name} /> : <div className="cat-card-placeholder" />}
+                <div className="cat-card-body">
+                  <strong>{cat.name}</strong>
+                  {cat.description ? <p>{cat.description}</p> : null}
+                  <div className="cat-card-actions">
+                    <Button variant="ghost" onClick={() => edit(cat)}>Edit</Button>
+                    <Button variant="ghost" onClick={() => setDeleteTarget(cat)}>Delete</Button>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {!categories.length ? <EmptyState title="No categories yet" /> : null}
+          </div>
+        </section>
+        <aside>
+          <form className="form-card" onSubmit={form.handleSubmit(submit)}>
+            <h2>{editing ? 'Edit category' : 'Add category'}</h2>
+            <Input label="Name" error={form.formState.errors.name?.message} {...form.register('name')} />
+            <Input label="Description" as="textarea" rows="3" error={form.formState.errors.description?.message} {...form.register('description')} />
+            <Input label="Image URL" error={form.formState.errors.imageUrl?.message} {...form.register('imageUrl')} />
+            <Button>{editing ? 'Update' : 'Create'}</Button>
+            {editing ? <Button type="button" variant="ghost" onClick={() => { setEditing(null); form.reset(); }}>Cancel</Button> : null}
+          </form>
+        </aside>
+      </div>
+      <Modal open={Boolean(deleteTarget)} title="Delete category" onClose={() => setDeleteTarget(null)}>
+        <div className="form-card">
+          <p>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.</p>
+          <div className="hero-actions">
+            <Button onClick={confirmDelete}>Delete</Button>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 function ProductForm({ form, categories, onSubmit, editing, onCancel }) {
-  return <form className="form-card" onSubmit={form.handleSubmit(onSubmit)}><h2>{editing ? 'Edit product' : 'Add product'}</h2><Input label="Name" error={form.formState.errors.name?.message} {...form.register('name')} /><Input label="Description" as="textarea" rows="4" error={form.formState.errors.description?.message} {...form.register('description')} /><Input label="Price" type="number" step="0.01" error={form.formState.errors.price?.message} {...form.register('price')} /><Input label="Stock" type="number" error={form.formState.errors.stockQuantity?.message} {...form.register('stockQuantity')} /><label className="field"><span>Category</span><select className="input" {...form.register('categoryId')}><option value="">Select</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{form.formState.errors.categoryId ? <small className="field-error">{form.formState.errors.categoryId.message}</small> : null}</label><Input label="Image URL" error={form.formState.errors.imageUrl?.message} {...form.register('imageUrl')} /><Button>{editing ? 'Update' : 'Create'}</Button>{editing ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button> : null}</form>;
+  return (
+    <form className="form-card compact" onSubmit={form.handleSubmit(onSubmit)}>
+      <h2 style={{ fontSize: '1.1rem', marginBottom: 0 }}>{editing ? 'Edit product' : 'Add product'}</h2>
+      <Input label="Name" error={form.formState.errors.name?.message} {...form.register('name')} />
+      <Input label="Description" as="textarea" rows="2" error={form.formState.errors.description?.message} {...form.register('description')} />
+      <div className="form-row">
+        <Input label="Price (₹)" type="number" step="0.01" error={form.formState.errors.price?.message} {...form.register('price')} />
+        <Input label="Stock qty" type="number" error={form.formState.errors.stockQuantity?.message} {...form.register('stockQuantity')} />
+      </div>
+      <label className="field">
+        <span>Category</span>
+        <select className="input" {...form.register('categoryId')}>
+          <option value="">Select category</option>
+          {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select>
+        {form.formState.errors.categoryId ? <small className="field-error">{form.formState.errors.categoryId.message}</small> : null}
+      </label>
+      <Input label="Image URL" error={form.formState.errors.imageUrl?.message} {...form.register('imageUrl')} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button>{editing ? 'Update product' : 'Add product'}</Button>
+        {editing ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button> : null}
+      </div>
+    </form>
+  );
 }
 
 function Stats({ cards }) {
-  return <div className="stats-grid">{cards.map(([label, value, icon]) => <article className="stat-card" key={label}><span>{icon}</span><strong>{value}</strong><small>{label}</small></article>)}</div>;
+  return (
+    <div className="stats-grid">
+      {cards.map(([label, value, icon]) => (
+        <article className="stat-card" key={label} style={{ padding: '16px 20px', gap: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <strong style={{ fontSize: '1.6rem' }}>{value}</strong>
+            <span style={{ opacity: 0.35, lineHeight: 0 }}>{icon}</span>
+          </div>
+          <small>{label}</small>
+        </article>
+      ))}
+    </div>
+  );
 }

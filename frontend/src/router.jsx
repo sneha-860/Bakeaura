@@ -11,7 +11,7 @@ import { CartPage, CheckoutPage } from './pages/CartCheckoutPages';
 import { MyOrdersPage, OrderDetailPage } from './pages/OrdersPages';
 import { AddressesPage, CustomOrdersPage, FavouritesPage, NotificationsPage, ProfilePage, RoleApplicationPage } from './pages/UserPages';
 import { InfluencerProfilePage, InfluencersPage, SellerStorefrontPage, SellersPage } from './pages/DirectoryPages';
-import { AdminApplicationsPage, AdminDashboardPage, AdminPayoutsPage, AdminUsersPage, InfluencerCollaborationsPage, InfluencerDashboardPage, InfluencerWalletPage, IncomingOrdersPage, MyProductsPage, SellerCollaborationsPage, SellerCustomOrdersPage, SellerDashboardPage } from './pages/DashboardPages';
+import { AdminApplicationsPage, AdminCategoriesPage, AdminDashboardPage, AdminPayoutsPage, AdminUsersPage, InfluencerCollaborationsPage, InfluencerDashboardPage, InfluencerWalletPage, IncomingOrdersPage, MyProductsPage, SellerCollaborationsPage, SellerCustomOrdersPage, SellerDashboardPage } from './pages/DashboardPages';
 import ReelUploadPage from './pages/ReelUploadPage';
 import ReelFeedPage from './pages/ReelFeedPage';
 import SellerAnalyticsPage from './pages/seller/SellerAnalyticsPage';
@@ -85,7 +85,8 @@ const router = createBrowserRouter([
           { path: '/admin', element: <AdminDashboardPage /> },
           { path: '/admin/users', element: <AdminUsersPage /> },
           { path: '/admin/applications', element: <AdminApplicationsPage /> },
-          { path: '/admin/payouts', element: <AdminPayoutsPage /> }
+          { path: '/admin/payouts', element: <AdminPayoutsPage /> },
+          { path: '/admin/categories', element: <AdminCategoriesPage /> }
         ]
       },
       { path: '*', element: <NotFoundPage /> }

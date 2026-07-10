@@ -31,10 +31,10 @@ const addressSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180), 
   defaultAddress: z.boolean().optional() 
 });
-const applicationSchema = z.object({ requestedRole: z.enum([Role.SELLER, Role.INFLUENCER]), message: z.string().min(10) });
+const applicationSchema = z.object({ requestedRole: z.enum([Role.SELLER, Role.INFLUENCER]), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits'), message: z.string().min(10) });
 
 export function ProfilePage() {
-  const { setName } = useAuthStore();
+  const { setName, emailVerified } = useAuthStore();
   const [user, setUser] = useState(null);
   const [applications, setApplications] = useState([]);
   const [avatarFile, setAvatarFile] = useState(null);
@@ -124,35 +124,43 @@ export function ProfilePage() {
   return (
     <div className="page two-column">
       <section>
-        <h1>Profile</h1>
+        <section className="page-hero compact-hero">
+          <p className="eyebrow"><UserRound size={16} /> Account</p>
+          <h1>Profile</h1>
+        </section>
         <form className="form-card compact" onSubmit={profileForm.handleSubmit(updateProfile)}>
-          <Input label="Name" error={profileForm.formState.errors.name?.message} {...profileForm.register('name')} />
-          <Input label="Phone (optional)" type="tel" placeholder="10–15 digit number" error={profileForm.formState.errors.phone?.message} {...profileForm.register('phone')} />
+          <div className="form-row">
+            <Input label="Name" error={profileForm.formState.errors.name?.message} {...profileForm.register('name')} />
+            <Input label="Phone (optional)" type="tel" placeholder="10–15 digit number" error={profileForm.formState.errors.phone?.message} {...profileForm.register('phone')} />
+          </div>
           <label className="field">
             <span>Bio (optional)</span>
             <textarea className="input" rows={3} maxLength={500} placeholder="Tell people a little about yourself..." {...profileForm.register('bio')} />
             {profileForm.formState.errors.bio ? <small className="field-error">{profileForm.formState.errors.bio.message}</small> : null}
           </label>
-          <button type="button" className="btn btn-ghost" onClick={detectLocation}>
+          <button type="button" className="btn btn-ghost" onClick={detectLocation} style={{ justifySelf: 'start' }}>
             <MapPin size={16} /> Use my current location
           </button>
-          <Input label="Latitude" type="number" step="any" error={profileForm.formState.errors.latitude?.message} {...profileForm.register('latitude')} />
-          <Input label="Longitude" type="number" step="any" error={profileForm.formState.errors.longitude?.message} {...profileForm.register('longitude')} />
+          <div className="form-row">
+            <Input label="Latitude" type="number" step="any" error={profileForm.formState.errors.latitude?.message} {...profileForm.register('latitude')} />
+            <Input label="Longitude" type="number" step="any" error={profileForm.formState.errors.longitude?.message} {...profileForm.register('longitude')} />
+          </div>
           <Button>Save profile</Button>
         </form>
-        <form className="form-card compact" onSubmit={passwordForm.handleSubmit(updatePassword)}>
-          <h2>Change password</h2>
-          <Input label="Current password" type="password" error={passwordForm.formState.errors.currentPassword?.message} {...passwordForm.register('currentPassword')} />
-          <Input label="New password" type="password" error={passwordForm.formState.errors.newPassword?.message} {...passwordForm.register('newPassword')} />
-          <Button variant="ghost">Update password</Button>
-        </form>
-        <form className="form-card compact" onSubmit={emailForm.handleSubmit(requestEmailChange)}>
-          <h2>Change email</h2>
-          <p className="muted">We'll send a verification link to your new address — your login email won't change until you confirm it.</p>
-          <Input label="New email" type="email" error={emailForm.formState.errors.newEmail?.message} {...emailForm.register('newEmail')} />
-          <Input label="Current password" type="password" error={emailForm.formState.errors.currentPassword?.message} {...emailForm.register('currentPassword')} />
-          <Button variant="ghost">Send verification email</Button>
-        </form>
+        <div className="security-grid">
+          <form className="form-card compact" onSubmit={passwordForm.handleSubmit(updatePassword)}>
+            <h2>Change password</h2>
+            <Input label="Current password" type="password" error={passwordForm.formState.errors.currentPassword?.message} {...passwordForm.register('currentPassword')} />
+            <Input label="New password" type="password" error={passwordForm.formState.errors.newPassword?.message} {...passwordForm.register('newPassword')} />
+            <Button variant="ghost">Update password</Button>
+          </form>
+          <form className="form-card compact" onSubmit={emailForm.handleSubmit(requestEmailChange)}>
+            <h2>Change email</h2>
+            <Input label="New email" type="email" error={emailForm.formState.errors.newEmail?.message} {...emailForm.register('newEmail')} />
+            <Input label="Current password" type="password" error={emailForm.formState.errors.currentPassword?.message} {...emailForm.register('currentPassword')} />
+            <Button variant="ghost">Send verification email</Button>
+          </form>
+        </div>
       </section>
       <aside className="summary-panel">
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
@@ -173,7 +181,9 @@ export function ProfilePage() {
         {user?.bio ? <p className="muted" style={{ fontSize: '0.9rem' }}>{user.bio}</p> : null}
         <span className="pill">{user?.role}</span>
         {user?.role !== Role.SELLER && user?.role !== Role.ADMIN && !hasPendingApplication && (
-          <Link className="btn btn-primary" to="/apply">Apply for a role</Link>
+          emailVerified
+            ? <Link className="btn btn-primary" to="/apply">Apply for a role</Link>
+            : <Link className="btn btn-ghost" to="/verify-email" style={{ fontSize: '0.85rem' }}>Verify email to apply for a role</Link>
         )}
         {hasPendingApplication && (
           <div className="note" style={{ padding: '12px', background: '#fff3cd', borderRadius: '8px', fontSize: '0.9rem' }}>
@@ -324,15 +334,23 @@ export function NotificationsPage() {
 }
 
 export function RoleApplicationPage() {
+  const { emailVerified } = useAuthStore();
   const [applications, setApplications] = useState([]);
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(applicationSchema), defaultValues: { requestedRole: Role.SELLER } });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(applicationSchema), defaultValues: { requestedRole: Role.SELLER } });
   const load = () => roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([]));
+
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    usersApi.me().then((me) => {
+      if (me?.phone) setValue('phone', me.phone);
+    }).catch(() => {});
+  }, []);
 
   async function submit(values) {
     try {
       await roleApplicationsApi.create(values);
-      reset({ requestedRole: Role.SELLER, message: '' });
+      reset({ requestedRole: Role.SELLER, phone: '', message: '' });
       toast.success('Application submitted');
       load();
     } catch (error) {
@@ -343,7 +361,23 @@ export function RoleApplicationPage() {
   return (
     <div className="page two-column">
       <section><h1>Role applications</h1><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{titleCase(app.requestedRole)}</h3><p>{app.message}</p>{app.reviewNote ? <small>{app.reviewNote}</small> : null}</article>)}{!applications.length ? <EmptyState title="No applications yet" /> : null}</div></section>
-      <aside><form className="form-card" onSubmit={handleSubmit(submit)}><h2>Apply</h2><label className="field"><span>Requested role</span><select className="input" {...register('requestedRole')}><option value={Role.SELLER}>Seller</option><option value={Role.INFLUENCER}>Influencer</option></select></label><Input label="Message" as="textarea" rows="5" error={errors.message?.message} {...register('message')} /><Button><Send size={16} /> Submit</Button></form></aside>
+      <aside>
+        {!emailVerified ? (
+          <div className="form-card" style={{ textAlign: 'center', gap: 12, display: 'grid' }}>
+            <h2>Apply</h2>
+            <p className="muted" style={{ fontSize: '0.9rem' }}>You need to verify your email address before applying for a role.</p>
+            <Link className="btn btn-primary" to="/verify-email">Verify email</Link>
+          </div>
+        ) : (
+          <form className="form-card" onSubmit={handleSubmit(submit)}>
+            <h2>Apply</h2>
+            <label className="field"><span>Requested role</span><select className="input" {...register('requestedRole')}><option value={Role.SELLER}>Seller</option><option value={Role.INFLUENCER}>Influencer</option></select></label>
+            <Input label="Phone number" type="tel" placeholder="10–15 digit mobile number" error={errors.phone?.message} {...register('phone')} />
+            <Input label="Message" as="textarea" rows="5" error={errors.message?.message} {...register('message')} />
+            <Button><Send size={16} /> Submit</Button>
+          </form>
+        )}
+      </aside>
     </div>
   );
 }

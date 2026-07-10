@@ -12,7 +12,7 @@ import { ApplicationStatus } from '../api/enums';
 
 export default function Navbar() {
     const navigate = useNavigate();
-    const { isAuthenticated, role, email, name, logout, cartCount } = useAuthStore();
+    const { isAuthenticated, role, email, name, logout, cartCount, emailVerified } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [unread, setUnread] = useState(0);
@@ -53,23 +53,18 @@ export default function Navbar() {
 
     const nav = (
         <>
-            <NavLink to="/products">Products</NavLink>
-            <NavLink to="/sellers">Bakers</NavLink>
-            <NavLink to="/reels">Reels</NavLink>
+            <NavLink to="/products" end>Products</NavLink>
+            <NavLink to="/sellers" end>Bakers</NavLink>
+            <NavLink to="/reels" end>Reels</NavLink>
             {role === Role.CUSTOMER ? (
                 <NavLink to="/design">Design a Cake</NavLink>
             ) : null}
             {role === Role.SELLER ? (
-                <>
-                    <NavLink to="/seller">Seller Studio</NavLink>
-                    <NavLink to="/seller/custom-orders">Custom Requests</NavLink>
-                    <NavLink to="/seller/collaborations">Collaborations</NavLink>
-                    <NavLink to="/reels/upload">Upload Reel</NavLink>
-                </>
+                <NavLink to="/seller" end>Seller Studio</NavLink>
             ) : null}
             {role === Role.INFLUENCER ? (
                 <>
-                    <NavLink to="/influencer">Creator Hub</NavLink>
+                    <NavLink to="/influencer" end>Creator Hub</NavLink>
                     <NavLink to="/influencer/collaborations">Collaborations</NavLink>
                     <NavLink to="/influencer/wallet">Wallet</NavLink>
                     <NavLink to="/reels/upload">Upload Reel</NavLink>
@@ -77,7 +72,7 @@ export default function Navbar() {
             ) : null}
             {role === Role.ADMIN ? (
                 <>
-                    <NavLink to="/admin">Dashboard</NavLink>
+                    <NavLink to="/admin" end>Dashboard</NavLink>
                     <NavLink to="/admin/users">Users</NavLink>
                     <NavLink to="/admin/applications">Applications</NavLink>
                     <NavLink to="/admin/payouts">Payouts</NavLink>
@@ -145,10 +140,15 @@ export default function Navbar() {
                                         </Link>
                                     ) : null}
                                     {role !== Role.SELLER && role !== Role.ADMIN && !myApplications.some((a) => a.status === 'PENDING') && (
-                                        <button onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(false); setTimeout(() => setRoleModalOpen(true), 100); }} role="menuitem">
-                                            <Sparkles size={16} />
-                                            <span>Apply as Seller/Creator</span>
-                                        </button>
+                                        emailVerified
+                                            ? <button onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(false); setTimeout(() => setRoleModalOpen(true), 100); }} role="menuitem">
+                                                <Sparkles size={16} />
+                                                <span>Apply as Seller/Creator</span>
+                                              </button>
+                                            : <Link to="/verify-email" onClick={() => setProfileDropdownOpen(false)} role="menuitem">
+                                                <Sparkles size={16} />
+                                                <span>Verify email to apply</span>
+                                              </Link>
                                     )}
                                     <button onClick={handleLogout} role="menuitem">
                                         <LogOut size={16} />

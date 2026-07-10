@@ -68,10 +68,14 @@ export default function ProductCard({ product, summary, onFavourite, compact = f
           <p className="muted">by {product.sellerName || 'Bakeaura baker'}</p>
         </div>
         {summary ? (
-          <div className="rating-summary">
-            <RatingStars value={summary.averageRating} count={summary.reviewCount} />
-            {summary.reviewCount > 0 && <span className="review-count">({summary.reviewCount})</span>}
-          </div>
+          summary.reviewCount > 0 ? (
+            <div className="rating-summary">
+              <RatingStars value={summary.averageRating} count={summary.reviewCount} />
+              <span className="review-count">({summary.reviewCount})</span>
+            </div>
+          ) : (
+            <p className="no-reviews">No reviews yet</p>
+          )
         ) : null}
         <div className="card-row">
           <strong className="price">{currency(product.price)}</strong>
