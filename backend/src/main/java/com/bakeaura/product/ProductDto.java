@@ -17,6 +17,8 @@ public class ProductDto {
     private Integer stockQuantity;
     private String imageUrl;
     private Boolean isAvailable;
+    private Boolean isPreOrderOnly;
+    private Integer minAdvanceDays;
     private Long sellerId;
     private String sellerName;
     private Long categoryId;

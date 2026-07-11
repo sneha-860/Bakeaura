@@ -5,6 +5,7 @@ import com.bakeaura.category.Category;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.seller.SellerProfileRepository;
 import org.springframework.security.access.AccessDeniedException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
@@ -26,6 +27,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
+    private final SellerProfileRepository sellerProfileRepository;
 
     @CacheEvict(value = "products", allEntries = true)
     public ProductDto createProduct(ProductCreateDto dto, Long userId) {
@@ -171,13 +173,39 @@ public class ProductService {
         return productRepository.count();
     }
 
+    public long countProductsBySeller(Long sellerId) {
+        return productRepository.countBySellerId(sellerId);
+    }
+
     public boolean existsByCategory(Long categoryId) {
         return productRepository.existsByCategoryId(categoryId);
+    }
+
+    @CacheEvict(value = "products", allEntries = true)
+    public ProductDto toggleAvailability(Long productId, Long userId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
+        User seller = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!product.getSeller().getId().equals(seller.getId())) {
+            throw new AccessDeniedException("You can only modify your own products");
+        }
+
+        product.setIsAvailable(!product.getIsAvailable());
+        return toDto(productRepository.save(product));
     }
 
     public ProductDto toDto(Product product) {
         User seller = product.getSeller();
         Category category = product.getCategory();
+        String displayName = null;
+        if (seller != null) {
+            displayName = sellerProfileRepository.findByUserId(seller.getId())
+                    .map(p -> p.getShopName() != null && !p.getShopName().isBlank() ? p.getShopName() : seller.getName())
+                    .orElse(seller.getName());
+        }
         return new ProductDto(
                 product.getId(),
                 product.getName(),
@@ -186,8 +214,10 @@ public class ProductService {
                 product.getStockQuantity(),
                 product.getImageUrl(),
                 product.getIsAvailable(),
+                product.getIsPreOrderOnly(),
+                product.getMinAdvanceDays(),
                 seller == null ? null : seller.getId(),
-                seller == null ? null : seller.getName(),
+                displayName,
                 category == null ? null : category.getId(),
                 category == null ? null : category.getName(),
                 product.getCreatedAt()

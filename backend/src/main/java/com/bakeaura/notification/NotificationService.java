@@ -6,10 +6,7 @@ import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import java.util.List;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -22,12 +19,13 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    public Page<NotificationDto> getNotifications(Long userId, int page, int size) {
+    public List<NotificationDto> getNotifications(Long userId) {
         User user = getUser(userId);
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return notificationRepository
-                .findByUserOrderByCreatedAtDesc(user, pageable)
-                .map(this::toDto);
+                .findByUserOrderByCreatedAtDesc(user)
+                .stream()
+                .map(this::toDto)
+                .toList();
     }
 
     public long getUnreadCount(Long userId) {
@@ -44,11 +42,7 @@ public class NotificationService {
 
     @Transactional
     public void markAllRead(Long userId) {
-        User user = getUser(userId);
-        notificationRepository.findByUserOrderByCreatedAtDesc(user).forEach(notification -> {
-            notification.setRead(true);
-            notificationRepository.save(notification);
-        });
+        notificationRepository.markAllAsRead(getUser(userId));
     }
 
     @EventListener

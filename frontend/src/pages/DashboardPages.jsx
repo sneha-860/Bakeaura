@@ -32,7 +32,7 @@ const productSchema = z.object({
   name: z.string().min(2),
   description: z.string().min(5),
   price: z.coerce.number().positive(),
-  stockQuantity: z.coerce.number().int().min(0),
+  stockQuantity: z.preprocess((v) => (v === '' || v == null ? null : Number(v)), z.number().int().min(0).nullable().optional()),
   categoryId: z.coerce.number().positive(),
   imageUrl: z.string().url().or(z.literal('')).optional()
 });
@@ -49,10 +49,23 @@ const categorySchema = z.object({
 });
 
 const shopProfileSchema = z.object({
-  shopName: z.string().max(150),
+  shopName: z.string().min(2, 'Shop name is required').max(150),
   shopBio: z.string().max(1000),
-  deliveryRadiusKm: z.string(),
+  deliveryRadiusKm: z.preprocess(
+    (v) => (v === '' || v == null ? null : Number(v)),
+    z.number().positive('Must be a positive number').nullable().optional()
+  ),
   bannerImageUrl: z.string().url().or(z.literal(''))
+});
+
+const influencerProfileSchema = z.object({
+  niche: z.string().max(100).optional(),
+  instagramUrl: z.string().url().or(z.literal('')).optional(),
+  youtubeUrl: z.string().url().or(z.literal('')).optional(),
+  followerCount: z.preprocess(
+    (v) => (v === '' || v == null ? null : Number(v)),
+    z.number().int().positive().nullable().optional()
+  )
 });
 
 export function SellerDashboardPage() {
@@ -60,6 +73,7 @@ export function SellerDashboardPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [shopProfile, setShopProfile] = useState(null);
+  const [editingProfile, setEditingProfile] = useState(false);
   const shopForm = useForm({ resolver: zodResolver(shopProfileSchema) });
 
   function loadShopProfile(sellerId) {
@@ -90,10 +104,11 @@ export function SellerDashboardPage() {
       await sellersApi.updateProfile({
         shopName: values.shopName,
         shopBio: values.shopBio,
-        deliveryRadiusKm: values.deliveryRadiusKm === '' ? null : Number(values.deliveryRadiusKm),
+        deliveryRadiusKm: values.deliveryRadiusKm ?? null,
         bannerImageUrl: values.bannerImageUrl
       });
       toast.success('Shop profile updated');
+      setEditingProfile(false);
       loadShopProfile(me.id);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not update shop profile');
@@ -111,27 +126,61 @@ export function SellerDashboardPage() {
   }
 
   const gross = orders
-    .filter((order) => [OrderStatus.DELIVERED, OrderStatus.OUT_FOR_DELIVERY].includes(order.status))
+    .filter((order) => order.status === OrderStatus.DELIVERED)
     .reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+
+  const canOpenShop = shopProfile?.shopName &&
+    shopProfile?.deliveryRadiusKm &&
+    shopProfile?.productCount > 0;
+
+  const setupChecklist = shopProfile ? [
+    { label: 'Shop name', done: Boolean(shopProfile.shopName), required: true },
+    { label: 'Delivery radius', done: Boolean(shopProfile.deliveryRadiusKm), required: true },
+    { label: 'At least one product', done: shopProfile.productCount > 0, required: true },
+    { label: 'Shop bio', done: Boolean(shopProfile.shopBio), required: false },
+    { label: 'Banner image', done: Boolean(shopProfile.bannerImageUrl), required: false },
+  ] : [];
 
   return (
     <div className="page">
       <div className="section-head">
         <div>
           <p className="eyebrow">Seller Studio</p>
-          <h1>{me?.name || 'Your shop'}</h1>
+          <h1>{shopProfile?.shopName || me?.name || 'Your shop'}</h1>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {shopProfile ? (
             <>
               <span className={`pill ${shopProfile.isOpen ? 'success' : 'danger'}`}>{shopProfile.isOpen ? 'Shop open' : 'Shop closed'}</span>
-              <Button variant="ghost" onClick={toggleShopOpen}>{shopProfile.isOpen ? 'Close shop' : 'Open shop'}</Button>
+              <Button
+                variant="ghost"
+                onClick={toggleShopOpen}
+                title={!canOpenShop && !shopProfile.isOpen ? 'Complete your shop setup to open' : undefined}
+              >
+                {shopProfile.isOpen ? 'Close shop' : 'Open shop'}
+              </Button>
             </>
           ) : null}
           <Link className="btn btn-ghost" to="/seller/analytics">Analytics</Link>
           <Link className="btn btn-primary" to="/seller/products">Manage products</Link>
         </div>
       </div>
+
+      {shopProfile && !shopProfile.isOpen && !canOpenShop && (
+        <div className="setup-banner">
+          <p className="setup-banner-title">Complete your setup before opening</p>
+          <ul className="setup-checklist">
+            {setupChecklist.map((item) => (
+              <li key={item.label} className={`setup-item ${item.done ? 'done' : item.required ? 'missing' : 'optional'}`}>
+                <span className="setup-icon">{item.done ? '✓' : item.required ? '✗' : '·'}</span>
+                {item.label}
+                {!item.done && item.required && <span className="setup-required"> — required to open</span>}
+                {!item.done && !item.required && <span className="setup-optional"> (optional)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <Stats cards={[
         ['Products', products.length, <Package />],
@@ -151,14 +200,42 @@ export function SellerDashboardPage() {
           <h2 style={{ fontSize: '1.25rem' }}>Recent orders</h2>
           <OrderList orders={orders.slice(0, 5)} />
         </div>
-        <form className="form-card" onSubmit={shopForm.handleSubmit(saveShopProfile)}>
-          <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
-          <Input label="Shop name" error={shopForm.formState.errors.shopName?.message} {...shopForm.register('shopName')} />
-          <Input label="Shop bio" as="textarea" rows="3" error={shopForm.formState.errors.shopBio?.message} {...shopForm.register('shopBio')} />
-          <Input label="Delivery radius (km)" type="number" step="0.1" error={shopForm.formState.errors.deliveryRadiusKm?.message} {...shopForm.register('deliveryRadiusKm')} />
-          <Input label="Banner image URL" error={shopForm.formState.errors.bannerImageUrl?.message} {...shopForm.register('bannerImageUrl')} />
-          <Button>Save shop profile</Button>
-        </form>
+        {shopProfile?.shopName && !editingProfile ? (
+          <div className="form-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
+              <Button variant="ghost" type="button" onClick={() => setEditingProfile(true)}>Edit</Button>
+            </div>
+            <div>
+              <p className="eyebrow" style={{ marginBottom: 4 }}>Shop name</p>
+              <strong>{shopProfile.shopName}</strong>
+            </div>
+            {shopProfile.shopBio ? (
+              <div>
+                <p className="eyebrow" style={{ marginBottom: 4 }}>Bio</p>
+                <p className="muted">{shopProfile.shopBio}</p>
+              </div>
+            ) : null}
+            {shopProfile.deliveryRadiusKm ? (
+              <div>
+                <p className="eyebrow" style={{ marginBottom: 4 }}>Delivery radius</p>
+                <span className="pill">{shopProfile.deliveryRadiusKm} km radius</span>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <form className="form-card" onSubmit={shopForm.handleSubmit(saveShopProfile)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
+              {shopProfile?.shopName ? <Button variant="ghost" type="button" onClick={() => setEditingProfile(false)}>Cancel</Button> : null}
+            </div>
+            <Input label="Shop name" error={shopForm.formState.errors.shopName?.message} {...shopForm.register('shopName')} />
+            <Input label="Shop bio" as="textarea" rows="3" error={shopForm.formState.errors.shopBio?.message} {...shopForm.register('shopBio')} />
+            <Input label="Delivery radius (km)" type="number" step="0.1" error={shopForm.formState.errors.deliveryRadiusKm?.message} {...shopForm.register('deliveryRadiusKm')} />
+            <Input label="Banner image URL" error={shopForm.formState.errors.bannerImageUrl?.message} {...shopForm.register('bannerImageUrl')} />
+            <Button>Save shop profile</Button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -208,6 +285,16 @@ export function MyProductsPage() {
     }
   }
 
+  async function toggleAvailable(product) {
+    try {
+      const updated = await productsApi.toggleAvailable(product.id);
+      setProducts((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+      toast.success(updated.isAvailable ? 'Product is now visible' : 'Product hidden from customers');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not update product');
+    }
+  }
+
   return (
     <>
       <div className="page">
@@ -222,11 +309,16 @@ export function MyProductsPage() {
           <section>
             <div className="grid product-grid">
               {products.map((product) => (
-                <div key={product.id}>
+                <div key={product.id} style={{ opacity: product.isAvailable ? 1 : 0.55 }}>
                   <ProductCard product={product} />
-                  <div className="card-actions">
-                    <Button variant="ghost" onClick={() => edit(product)}>Edit</Button>
-                    <Button variant="ghost" onClick={() => setDeleteTarget(product)}>Delete</Button>
+                  <div className="card-actions" style={{ marginTop: 8, justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button variant="ghost" onClick={() => edit(product)}>Edit</Button>
+                      <Button variant="ghost" onClick={() => setDeleteTarget(product)}>Delete</Button>
+                    </div>
+                    <Button variant="ghost" onClick={() => toggleAvailable(product)}>
+                      {product.isAvailable ? 'Hide' : 'Show'}
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -588,7 +680,38 @@ export function AdminApplicationsPage() {
             {!applications.length ? <EmptyState title="No applications" /> : null}
           </div>
           <Modal open={Boolean(selected)} title="Review application" onClose={() => setSelected(null)}>
-            <Input label="Review note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} />
+            <div style={{ display: 'grid', gap: 12, marginBottom: 20, padding: '16px', background: 'var(--cream)', borderRadius: 12, border: '1px solid var(--border)' }}>
+              <div>
+                <p className="eyebrow" style={{ marginBottom: 2 }}>Applicant</p>
+                <strong>{selected?.userName}</strong>
+                <p className="muted" style={{ margin: 0 }}>{selected?.userEmail}</p>
+              </div>
+              {selected?.userPhone && (
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 2 }}>Phone</p>
+                  <span>{selected.userPhone}</span>
+                </div>
+              )}
+              {selected?.message && (
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 2 }}>Their message</p>
+                  <p style={{ margin: 0, lineHeight: 1.5 }}>{selected.message}</p>
+                </div>
+              )}
+              {selected?.socialUrl && (
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 2 }}>Social profile</p>
+                  <a href={selected.socialUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all', color: 'var(--sienna)' }}>{selected.socialUrl}</a>
+                </div>
+              )}
+              {selected?.followerCount != null && (
+                <div>
+                  <p className="eyebrow" style={{ marginBottom: 2 }}>Claimed followers</p>
+                  <strong>{selected.followerCount.toLocaleString()}</strong>
+                </div>
+              )}
+            </div>
+            <Input label="Review note (shown to applicant on rejection)" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} />
             <div className="hero-actions">
               <Button onClick={() => review('approve')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Approve'}</Button>
               <Button variant="ghost" onClick={() => review('reject')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button>
@@ -719,31 +842,110 @@ export function AdminPayoutsPage() {
 
 export function InfluencerDashboardPage() {
   const [me, setMe] = useState(null);
-  const [applications, setApplications] = useState([]);
-  useEffect(() => { usersApi.me().then(setMe); roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([])); }, []);
+  const [profile, setProfile] = useState(null);
+  const [referralCodes, setReferralCodes] = useState([]);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const profileForm = useForm({ resolver: zodResolver(influencerProfileSchema) });
+
+  function loadProfile() {
+    influencersApi.getMyProfile().then((p) => {
+      setProfile(p);
+      profileForm.reset({
+        niche: p.niche || '',
+        instagramUrl: p.instagramUrl || '',
+        youtubeUrl: p.youtubeUrl || '',
+        followerCount: p.followerCount ?? ''
+      });
+    }).catch(() => {});
+  }
+
+  useEffect(() => {
+    usersApi.me().then(setMe).catch(() => {});
+    loadProfile();
+    influencersApi.referralCodes().then(setReferralCodes).catch(() => setReferralCodes([]));
+  }, []);
+
+  async function saveProfile(values) {
+    try {
+      await influencersApi.updateProfile({
+        niche: values.niche || null,
+        instagramUrl: values.instagramUrl || null,
+        youtubeUrl: values.youtubeUrl || null,
+        followerCount: values.followerCount ?? null
+      });
+      toast.success('Profile updated');
+      setEditingProfile(false);
+      loadProfile();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not update profile');
+    }
+  }
+
   return (
     <div className="page">
-      <section className="page-hero compact-hero">
-        <p className="eyebrow">Creator Hub</p>
-        <h1>{me?.name || 'Influencer dashboard'}</h1>
-        <p>{me?.email}</p>
-        <div className="hero-actions">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Creator Hub</p>
+          <h1>{me?.name || 'Influencer dashboard'}</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Link className="btn btn-ghost" to="/influencer/analytics">Analytics</Link>
+          <Link className="btn btn-ghost" to="/influencer/wallet">Wallet</Link>
+          <Link className="btn btn-ghost" to="/influencer/collaborations">Collaborations</Link>
+          <Link className="btn btn-ghost" to="/reels/upload">Upload reel</Link>
         </div>
-      </section>
-      <section className="section">
-        <h2>Your applications</h2>
-        <div className="stack">
-          {applications.map((app) => (
-            <article className="panel" key={app.id}>
-              <span className="pill">{app.status}</span>
-              <h3>{titleCase(app.requestedRole)}</h3>
-              <p>{app.message}</p>
-            </article>
-          ))}
-          {!applications.length ? <EmptyState title="No applications found" /> : null}
+      </div>
+
+      <div className="two-column">
+        <div>
+          <h2 style={{ fontSize: '1.25rem', marginBottom: 16 }}>Your referral codes</h2>
+          <div className="stack">
+            {referralCodes.map((code) => (
+              <article className="panel" key={code.id} style={{ gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <code style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--sienna)' }}>{code.code}</code>
+                  <span className={`pill ${code.isActive ? 'success' : ''}`}>{code.isActive ? 'Active' : 'Inactive'}</span>
+                </div>
+                <small className="muted">Share this code with your audience to earn commissions on every order it generates.</small>
+              </article>
+            ))}
+            {!referralCodes.length ? <EmptyState title="No referral codes yet" text="A referral code is generated automatically when your account is approved." /> : null}
+          </div>
         </div>
-      </section>
+
+        {profile && !editingProfile ? (
+          <div className="form-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.25rem' }}>Creator profile</h2>
+              <Button variant="ghost" type="button" onClick={() => setEditingProfile(true)}>Edit</Button>
+            </div>
+            {profile.niche ? (
+              <div><p className="eyebrow" style={{ marginBottom: 4 }}>Niche</p><span className="pill">{titleCase(profile.niche)}</span></div>
+            ) : null}
+            {profile.followerCount ? (
+              <div><p className="eyebrow" style={{ marginBottom: 4 }}>Followers</p><strong>{profile.followerCount.toLocaleString()}</strong></div>
+            ) : null}
+            {profile.instagramUrl ? (
+              <div><p className="eyebrow" style={{ marginBottom: 4 }}>Instagram</p><a href={profile.instagramUrl} target="_blank" rel="noreferrer" className="muted" style={{ wordBreak: 'break-all' }}>{profile.instagramUrl}</a></div>
+            ) : null}
+            {profile.youtubeUrl ? (
+              <div><p className="eyebrow" style={{ marginBottom: 4 }}>YouTube</p><a href={profile.youtubeUrl} target="_blank" rel="noreferrer" className="muted" style={{ wordBreak: 'break-all' }}>{profile.youtubeUrl}</a></div>
+            ) : null}
+          </div>
+        ) : (
+          <form className="form-card" onSubmit={profileForm.handleSubmit(saveProfile)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '1.25rem' }}>Creator profile</h2>
+              {profile ? <Button variant="ghost" type="button" onClick={() => setEditingProfile(false)}>Cancel</Button> : null}
+            </div>
+            <Input label="Niche (e.g. baking, food, lifestyle)" error={profileForm.formState.errors.niche?.message} {...profileForm.register('niche')} />
+            <Input label="Instagram URL" placeholder="https://instagram.com/yourhandle" error={profileForm.formState.errors.instagramUrl?.message} {...profileForm.register('instagramUrl')} />
+            <Input label="YouTube URL" placeholder="https://youtube.com/@yourchannel" error={profileForm.formState.errors.youtubeUrl?.message} {...profileForm.register('youtubeUrl')} />
+            <Input label="Follower count" type="number" min="0" error={profileForm.formState.errors.followerCount?.message} {...profileForm.register('followerCount')} />
+            <Button>Save profile</Button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -1017,7 +1219,7 @@ function ProductForm({ form, categories, onSubmit, editing, onCancel }) {
       <Input label="Description" as="textarea" rows="2" error={form.formState.errors.description?.message} {...form.register('description')} />
       <div className="form-row">
         <Input label="Price (₹)" type="number" step="0.01" error={form.formState.errors.price?.message} {...form.register('price')} />
-        <Input label="Stock qty" type="number" error={form.formState.errors.stockQuantity?.message} {...form.register('stockQuantity')} />
+        <Input label="Stock qty" type="number" placeholder="Blank = unlimited" error={form.formState.errors.stockQuantity?.message} {...form.register('stockQuantity')} />
       </div>
       <label className="field">
         <span>Category</span>

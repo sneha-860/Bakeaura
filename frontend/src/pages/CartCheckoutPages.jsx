@@ -34,15 +34,17 @@ async function enrichCart(cart) {
   return items.map((item, index) => ({ ...item, product: details[index] }));
 }
 
+function itemSubtotal(item) {
+  return (Number(item.unitPrice) || 0) * (item.quantity || 0);
+}
+
 export function CartPage() {
   const navigate = useNavigate();
   const { setCartCount } = useAuthStore();
-  const [cart, setCart] = useState(null);
   const [items, setItems] = useState([]);
 
   async function load() {
-    const nextCart = await cartApi.get().catch(() => ({ items: [], totalAmount: 0 }));
-    setCart(nextCart);
+    const nextCart = await cartApi.get().catch(() => ({ items: [] }));
     const enriched = await enrichCart(nextCart);
     setItems(enriched);
     setCartCount(enriched.length);
@@ -72,7 +74,7 @@ export function CartPage() {
               <ProductImage src={item.product?.imageUrl} alt={item.productName} />
               <div><h3>{item.productName}</h3><p className="muted">{item.product?.sellerName}</p><strong>{currency(item.unitPrice)}</strong></div>
               <div className="quantity-row"><Button variant="icon" onClick={() => update(item.productId, item.quantity - 1)}><Minus size={15} /></Button><strong>{item.quantity}</strong><Button variant="icon" onClick={() => update(item.productId, item.quantity + 1)}><Plus size={15} /></Button></div>
-              <strong>{currency(item.subtotal)}</strong>
+              <strong>{currency(itemSubtotal(item))}</strong>
               <Button variant="icon" onClick={() => remove(item.productId)}><Trash2 size={16} /></Button>
             </article>
           ))}
@@ -80,7 +82,7 @@ export function CartPage() {
       </section>
       <aside className="summary-panel">
         <h2>Order summary</h2>
-        <div className="summary-line"><span>Total</span><strong>{currency(cart?.totalAmount)}</strong></div>
+        <div className="summary-line"><span>Total</span><strong>{currency(items.reduce((sum, item) => sum + itemSubtotal(item), 0))}</strong></div>
         <Link className="btn btn-primary" to="/checkout">Proceed to checkout</Link>
       </aside>
     </div>
@@ -120,7 +122,7 @@ export function CheckoutPage() {
       const sellerId = String(item.product?.sellerId || '');
       if (!groups[sellerId]) groups[sellerId] = { sellerId, sellerName: item.product?.sellerName, items: [], total: 0 };
       groups[sellerId].items.push(item);
-      groups[sellerId].total += Number(item.subtotal || 0);
+      groups[sellerId].total += itemSubtotal(item);
       return groups;
     }, {});
   }, [items]);

@@ -18,14 +18,40 @@ function fileToBase64(file) {
   });
 }
 
-const composeSchema = z.object({
-  description: z.string().min(20, 'Please describe your cake in at least 20 characters'),
-  occasion: z.string().min(1, 'Occasion is required'),
-});
+// Renders Gemini markdown (** bold **, * bullets) as proper JSX without any extra library
+function renderInline(text) {
+  const parts = text.split(/\*\*(.*?)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  );
+}
 
-const orderSchema = z
+function BriefRenderer({ text }) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  return (
+    <div className="brief-renderer">
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={i} className="brief-spacer" />;
+        if (/^[*•\-] /.test(trimmed)) {
+          return (
+            <div key={i} className="brief-bullet">
+              <span>•</span>
+              <span>{renderInline(trimmed.replace(/^[*•\-] /, ''))}</span>
+            </div>
+          );
+        }
+        return <div key={i} className="brief-line">{renderInline(trimmed)}</div>;
+      })}
+    </div>
+  );
+}
+
+const composeSchema = z
   .object({
-    sellerId: z.string().min(1, 'Please select a baker'),
+    description: z.string().min(20, 'Please describe your cake in at least 20 characters'),
+    occasion: z.string().min(1, 'Occasion is required'),
     serves: z.coerce.number().int().min(1, 'Must serve at least 1'),
     budgetMin: z.coerce.number().positive('Enter a positive amount'),
     budgetMax: z.coerce.number().positive('Enter a positive amount'),
@@ -34,6 +60,10 @@ const orderSchema = z
     message: 'Maximum must be ≥ minimum',
     path: ['budgetMax'],
   });
+
+const orderSchema = z.object({
+  sellerId: z.string().min(1, 'Please select a baker'),
+});
 
 const STAGE = {
   COMPOSE: 'compose',
@@ -46,7 +76,7 @@ const STAGE = {
 export default function CakeDesignPage() {
   const [stage, setStage] = useState(STAGE.COMPOSE);
   const [preview, setPreview] = useState(null);
-  const [savedOccasion, setSavedOccasion] = useState('');
+  const [savedCompose, setSavedCompose] = useState(null);
   const [referenceFile, setReferenceFile] = useState(null);
   const [refPreviewUrl, setRefPreviewUrl] = useState(null);
   const [sellers, setSellers] = useState([]);
@@ -76,13 +106,16 @@ export default function CakeDesignPage() {
 
   async function onGenerate(values) {
     setGenError('');
-    setSavedOccasion(values.occasion);
+    setSavedCompose(values);
     setStage(STAGE.GENERATING);
     try {
       const referenceImageBase64 = referenceFile ? await fileToBase64(referenceFile) : null;
       const result = await cakeDesignApi.preview({
         description: values.description,
         occasion: values.occasion,
+        serves: values.serves,
+        budgetMin: values.budgetMin,
+        budgetMax: values.budgetMax,
         referenceImageBase64,
       });
       setPreview(result);
@@ -102,10 +135,10 @@ export default function CakeDesignPage() {
         sellerId: Number(values.sellerId),
         designBrief: preview.designBrief,
         imageBase64: preview.imageBase64,
-        occasion: savedOccasion,
-        serves: Number(values.serves),
-        budgetMin: Number(values.budgetMin),
-        budgetMax: Number(values.budgetMax),
+        occasion: savedCompose.occasion,
+        serves: Number(savedCompose.serves),
+        budgetMin: Number(savedCompose.budgetMin),
+        budgetMax: Number(savedCompose.budgetMax),
       });
       setStage(STAGE.SUCCESS);
     } catch (err) {
@@ -174,6 +207,33 @@ function ComposeStage({ form, onSubmit, referenceFile, refPreviewUrl, onFileSele
           error={errors.occasion?.message}
           {...register('occasion')}
         />
+
+        <div className="ai-budget-row">
+          <Input
+            type="number"
+            label="Serves (people)"
+            placeholder="e.g. 20"
+            min={1}
+            error={errors.serves?.message}
+            {...register('serves')}
+          />
+          <Input
+            type="number"
+            label="Budget min (₹)"
+            placeholder="e.g. 1500"
+            min={1}
+            error={errors.budgetMin?.message}
+            {...register('budgetMin')}
+          />
+          <Input
+            type="number"
+            label="Budget max (₹)"
+            placeholder="e.g. 3000"
+            min={1}
+            error={errors.budgetMax?.message}
+            {...register('budgetMax')}
+          />
+        </div>
 
         <div className="field">
           <label>
@@ -264,10 +324,6 @@ function PreviewStage({ preview, orderForm, onOrder, onRetry, sellers, ordering,
               <p>Image preview unavailable right now. Your baker's brief is ready to send.</p>
             </div>
           )}
-          <div className="ai-brief-box">
-            <strong>Baker's Brief</strong>
-            {preview.designBrief}
-          </div>
         </div>
 
         <div className="ai-order-form">
@@ -287,34 +343,6 @@ function PreviewStage({ preview, orderForm, onOrder, onRetry, sellers, ordering,
                 {errors.sellerId && <p className="field-error">{errors.sellerId.message}</p>}
               </div>
 
-              <Input
-                type="number"
-                label="Serves"
-                placeholder="e.g. 20"
-                min={1}
-                error={errors.serves?.message}
-                {...register('serves')}
-              />
-
-              <div className="ai-budget-row">
-                <Input
-                  type="number"
-                  label="Budget min (₹)"
-                  placeholder="1500"
-                  min={1}
-                  error={errors.budgetMin?.message}
-                  {...register('budgetMin')}
-                />
-                <Input
-                  type="number"
-                  label="Budget max (₹)"
-                  placeholder="3000"
-                  min={1}
-                  error={errors.budgetMax?.message}
-                  {...register('budgetMax')}
-                />
-              </div>
-
               {error && <p className="error-message">{error}</p>}
 
               <div className="ai-order-actions">
@@ -328,6 +356,11 @@ function PreviewStage({ preview, orderForm, onOrder, onRetry, sellers, ordering,
             </div>
           </form>
         </div>
+      </div>
+
+      <div className="ai-brief-box">
+        <strong className="ai-brief-label">Baker's Brief</strong>
+        <BriefRenderer text={preview.designBrief} />
       </div>
     </div>
   );

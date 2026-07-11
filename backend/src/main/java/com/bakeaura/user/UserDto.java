@@ -14,6 +14,7 @@ public class UserDto {
     private String email;
     private Role role;
     private Boolean isActive;
+    private Boolean isEmailVerified;
     private Double latitude;
     private Double longitude;
     private String phone;

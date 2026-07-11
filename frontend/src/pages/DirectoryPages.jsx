@@ -113,24 +113,31 @@ export function SellerStorefrontPage() {
     <div className="page">
       <section className="page-hero compact-hero">
         <p className="eyebrow">Seller storefront</p>
-        <h1>{seller?.name || 'Bakeaura seller'}</h1>
-        <p>{seller?.email}</p>
-        {summary?.reviewCount > 0 ? <RatingStars value={summary.averageRating} count={summary.reviewCount} /> : null}
-        {isAuthenticated && role === Role.CUSTOMER ? <Button onClick={() => setCustomOrderOpen(true)}><Sparkles size={16} /> Request a custom cake</Button> : null}
+        <h1>{seller?.shopName || seller?.name || 'Bakeaura seller'}</h1>
+        {seller?.shopName ? <p className="muted">by {seller.name}</p> : null}
+        {seller?.shopBio ? <p className="storefront-bio">{seller.shopBio}</p> : null}
+        <div className="hero-actions">
+          {seller?.isOpen != null ? <span className={`pill${seller.isOpen ? ' success' : ''}`}>{seller.isOpen ? 'Open now' : 'Closed'}</span> : null}
+          {seller?.deliveryRadiusKm ? <span className="pill">{seller.deliveryRadiusKm} km radius</span> : null}
+          {summary?.reviewCount > 0 ? <RatingStars value={summary.averageRating} count={summary.reviewCount} /> : null}
+          {isAuthenticated && role === Role.CUSTOMER ? <Button onClick={() => setCustomOrderOpen(true)}><Sparkles size={16} /> Request a custom cake</Button> : null}
+        </div>
       </section>
-      <section className="section">
+      <section className="section storefront-section">
         <h2>Products</h2>
         {products.length ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} />)}</div> : <EmptyState title="No products listed" />}
       </section>
-      <section className="section">
-        <h2>Feed</h2>
-        <div className="grid story-grid">{feed.map((item) => <article className="story-card" key={item.id}><ProductImage src={item.imageUrl} /><div><span className="pill">{item.type}</span><p>{item.caption}</p></div></article>)}</div>
-      </section>
-      <section className="section">
+      {feed.length ? (
+        <section className="section storefront-section">
+          <h2>Feed</h2>
+          <div className="grid story-grid">{feed.map((item) => <article className="story-card" key={item.id}><ProductImage src={item.imageUrl} /><div><span className="pill">{item.type}</span><p>{item.caption}</p></div></article>)}</div>
+        </section>
+      ) : null}
+      <section className="section storefront-section">
         <h2>Reviews</h2>
         <div className="stack">{reviews.map((review) => <article className="review-card" key={review.id}><RatingStars value={review.rating} /><p>{review.comment}</p><small>{review.customerName} · {formatDate(review.createdAt)}</small></article>)}{!reviews.length ? <EmptyState title="No reviews yet" /> : null}</div>
       </section>
-      <Modal open={customOrderOpen} title={`Request a custom cake from ${seller?.name || 'this baker'}`} onClose={() => setCustomOrderOpen(false)}>
+      <Modal open={customOrderOpen} title={`Request a custom cake from ${seller?.shopName || seller?.name || 'this baker'}`} onClose={() => setCustomOrderOpen(false)}>
         <form className="form-card" onSubmit={handleSubmit(submitCustomOrder)}>
           <Input label="Occasion" placeholder="Birthday, anniversary, ..." error={errors.occasion?.message} {...register('occasion')} />
           <Input label="Design brief" as="textarea" rows="4" placeholder="Describe flavour, size, decoration, theme..." error={errors.designBrief?.message} {...register('designBrief')} />

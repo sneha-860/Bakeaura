@@ -94,7 +94,20 @@ public class SellerService {
         }
 
         SellerProfile profile = sellerProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Seller profile not found. Please complete your profile first."));
+                .orElseGet(() -> SellerProfile.builder().user(seller).isOpen(false).build());
+
+        // Only enforce readiness when opening — closing is always allowed
+        if (!Boolean.TRUE.equals(profile.getIsOpen())) {
+            if (profile.getShopName() == null || profile.getShopName().isBlank()) {
+                throw new BadRequestException("Set your shop name before opening for business");
+            }
+            if (profile.getDeliveryRadiusKm() == null) {
+                throw new BadRequestException("Set your delivery radius before opening for business");
+            }
+            if (productService.countProductsBySeller(userId) == 0) {
+                throw new BadRequestException("Add at least one product before opening for business");
+            }
+        }
 
         profile.setIsOpen(!profile.getIsOpen());
         sellerProfileRepository.save(profile);
@@ -117,7 +130,7 @@ public class SellerService {
     private SellerProfileDto toDto(User seller) {
         SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
 
-        long productCount = productService.getProductsBySeller(seller.getId()).size();
+        long productCount = productService.countProductsBySeller(seller.getId());
 
         ReviewSummaryDto reviewSummary = reviewService.getSummary(seller.getId());
 
@@ -133,7 +146,6 @@ public class SellerService {
         return SellerProfileDto.builder()
                 .id(seller.getId())
                 .name(seller.getName())
-                .email(seller.getEmail())
                 .latitude(seller.getLatitude())
                 .longitude(seller.getLongitude())
                 .shopName(profile != null ? profile.getShopName() : null)

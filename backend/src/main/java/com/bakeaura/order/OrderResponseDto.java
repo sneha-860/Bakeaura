@@ -12,6 +12,7 @@ import java.util.List;
 @Builder
 public class OrderResponseDto {
     private Long id;
+    private Long sellerId;
     private String customerName;
     private String sellerName;
     private OrderStatus status;

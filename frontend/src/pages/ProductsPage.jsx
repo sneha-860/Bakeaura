@@ -1,4 +1,4 @@
-import { Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { categoriesApi } from '../api/categories';
@@ -6,10 +6,16 @@ import { productsApi } from '../api/products';
 import { reviewsApi } from '../api/reviews';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
-import Input from '../components/Input';
 import ProductCard from '../components/ProductCard';
 import SkeletonCard from '../components/SkeletonCard';
 import { unwrapPage } from '../utils/format';
+
+const SORT_OPTIONS = [
+  { label: 'Newest', value: 'createdAt,desc' },
+  { label: 'Price ↑', value: 'price,asc' },
+  { label: 'Price ↓', value: 'price,desc' },
+  { label: 'A–Z', value: 'name,asc' },
+];
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,10 +24,10 @@ export default function ProductsPage() {
     categoryId: searchParams.get('categoryId') || '',
     minPrice: '',
     maxPrice: '',
-    available: '',
+    available: 'true',
     sort: 'createdAt,desc',
     page: Number(searchParams.get('page') || 0),
-    size: 12
+    size: 12,
   });
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,47 +38,175 @@ export default function ProductsPage() {
   useEffect(() => { categoriesApi.list().then(setCategories).catch(() => setCategories([])); }, []);
   useEffect(() => { loadProducts(filters); }, [filters.page]);
 
+  const urlKeyword = searchParams.get('keyword') || '';
+  useEffect(() => {
+    if (urlKeyword === filters.keyword) return;
+    const next = { ...filters, keyword: urlKeyword, page: 0 };
+    setFilters(next);
+    loadProducts(next);
+  }, [urlKeyword]);
+
   async function loadProducts(nextFilters = filters) {
     setLoading(true);
-    const payload = await productsApi.filter(Object.fromEntries(Object.entries(nextFilters).filter(([, value]) => value !== '' && value !== null))).catch(() => []);
+    const payload = await productsApi
+      .filter(Object.fromEntries(Object.entries(nextFilters).filter(([, v]) => v !== '' && v !== null)))
+      .catch(() => []);
     const page = unwrapPage(payload);
     setProducts(page.items);
     setTotalPages(page.totalPages);
-    const sellerIds = [...new Set(page.items.map((product) => product.sellerId).filter(Boolean))];
-    const pairs = await Promise.all(sellerIds.map((sellerId) => reviewsApi.sellerSummary(sellerId).then((summary) => [sellerId, summary]).catch(() => [sellerId, null])));
+    setTotalCount(page.totalItems ?? page.items.length);
+    const sellerIds = [...new Set(page.items.map((p) => p.sellerId).filter(Boolean))];
+    const pairs = await Promise.all(
+      sellerIds.map((id) => reviewsApi.sellerSummary(id).then((s) => [id, s]).catch(() => [id, null]))
+    );
     setSummaries(Object.fromEntries(pairs));
     setLoading(false);
   }
 
-  function submit(event) {
-    event.preventDefault();
-    const next = { ...filters, page: 0 };
+  function apply(patch) {
+    const next = { ...filters, ...patch, page: 0 };
     setFilters(next);
-    setSearchParams(Object.fromEntries(Object.entries(next).filter(([, value]) => value !== '')));
+    setSearchParams(Object.fromEntries(Object.entries(next).filter(([, v]) => v !== '')));
     loadProducts(next);
   }
 
+  function clearKeyword() {
+    apply({ keyword: '' });
+  }
+
+  function submitSearch(e) {
+    e.preventDefault();
+    apply({});
+  }
+
+  const activeCategory = categories.find((c) => String(c.id) === String(filters.categoryId));
+
   return (
-    <div className="page">
-      <section className="page-hero compact-hero">
-        <p className="eyebrow"><Filter size={16} /> Bakeaura menu</p>
-        <h1>Find the right bake for today.</h1>
+    <div className="page products-page">
+
+      {/* ── Page heading ───────────────────────────────── */}
+      <section className="section-head">
+        <div>
+          <p className="eyebrow">Bakeaura menu</p>
+          <h1>{activeCategory ? activeCategory.name : 'All bakes'}</h1>
+        </div>
       </section>
-      <form className="filter-bar" onSubmit={submit}>
-        <Input label="Search" value={filters.keyword} onChange={(event) => setFilters({ ...filters, keyword: event.target.value })} />
-        <label className="field"><span>Category</span><select className="input" value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}><option value="">All</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-        <Input label="Min price" type="number" value={filters.minPrice} onChange={(event) => setFilters({ ...filters, minPrice: event.target.value })} />
-        <Input label="Max price" type="number" value={filters.maxPrice} onChange={(event) => setFilters({ ...filters, maxPrice: event.target.value })} />
-        <label className="field"><span>Available</span><select className="input" value={filters.available} onChange={(event) => setFilters({ ...filters, available: event.target.value })}><option value="">Any</option><option value="true">In stock</option><option value="false">Unavailable</option></select></label>
-        <label className="field"><span>Sort</span><select className="input" value={filters.sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value })}><option value="createdAt,desc">Newest</option><option value="price,asc">Price low</option><option value="price,desc">Price high</option><option value="name,asc">Name</option></select></label>
-        <Button>Apply</Button>
-      </form>
-      {loading ? <SkeletonCard count={8} /> : products.length ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} summary={summaries[product.sellerId]} />)}</div> : <EmptyState title="No products found" />}
-      <div className="pagination">
-        <Button variant="ghost" disabled={filters.page <= 0} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous</Button>
-        <span>Page {filters.page + 1} of {totalPages}</span>
-        <Button variant="ghost" disabled={filters.page + 1 >= totalPages} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next</Button>
+
+      {/* ── Category chips ─────────────────────────────── */}
+      <div className="filter-chips-row">
+        <button
+          className={`filter-chip ${!filters.categoryId ? 'active' : ''}`}
+          onClick={() => apply({ categoryId: '' })}
+        >
+          All
+        </button>
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            className={`filter-chip ${String(filters.categoryId) === String(cat.id) ? 'active' : ''}`}
+            onClick={() => apply({ categoryId: cat.id })}
+          >
+            {cat.name}
+          </button>
+        ))}
       </div>
+
+      {/* ── Toolbar: sort pills + search + controls ────── */}
+      <div className="products-toolbar">
+        <div className="sort-pills">
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              className={`sort-pill ${filters.sort === opt.value ? 'active' : ''}`}
+              onClick={() => apply({ sort: opt.value })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="toolbar-right">
+          <form className="toolbar-search" onSubmit={submitSearch}>
+            <Search size={14} className="toolbar-search-icon" />
+            <input
+              className="toolbar-search-input"
+              placeholder="Search…"
+              value={filters.keyword}
+              onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
+            />
+            {filters.keyword && (
+              <button type="button" className="toolbar-search-clear" onClick={clearKeyword}>
+                <X size={12} />
+              </button>
+            )}
+          </form>
+
+          <button
+            className={`sort-pill ${filters.available === 'true' ? 'active' : ''}`}
+            onClick={() => apply({ available: filters.available === 'true' ? '' : 'true' })}
+          >
+            In stock
+          </button>
+
+          <div className="price-range">
+            <input
+              className="price-input"
+              type="number"
+              placeholder="Min ₹"
+              value={filters.minPrice}
+              onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+              onBlur={() => apply({ minPrice: filters.minPrice })}
+            />
+            <span className="price-dash">–</span>
+            <input
+              className="price-input"
+              type="number"
+              placeholder="Max ₹"
+              value={filters.maxPrice}
+              onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+              onBlur={() => apply({ maxPrice: filters.maxPrice })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Grid ──────────────────────────────────────── */}
+      {loading ? (
+        <SkeletonCard count={8} />
+      ) : products.length ? (
+        <div className="product-grid">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              summary={summaries[product.sellerId]}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No products found" />
+      )}
+
+      {/* ── Pagination ────────────────────────────────── */}
+      {totalPages > 1 && (
+        <div className="pagination">
+          <Button
+            variant="ghost"
+            disabled={filters.page <= 0}
+            onClick={() => setFilters((f) => ({ ...f, page: f.page - 1 }))}
+          >
+            <ChevronLeft size={16} /> Previous
+          </Button>
+          <span className="page-info">Page {filters.page + 1} of {totalPages}</span>
+          <Button
+            variant="ghost"
+            disabled={filters.page + 1 >= totalPages}
+            onClick={() => setFilters((f) => ({ ...f, page: f.page + 1 }))}
+          >
+            Next <ChevronRight size={16} />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

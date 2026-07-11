@@ -108,6 +108,7 @@ public class UserService {
                 user.getEmail(),
                 user.getRole(),
                 user.getIsActive(),
+                user.getIsEmailVerified(),
                 user.getLatitude(),
                 user.getLongitude(),
                 user.getPhone(),
@@ -131,5 +132,11 @@ public class UserService {
                 .map(user -> user.getRole() == com.bakeaura.enums.Role.SELLER
                         && Boolean.TRUE.equals(user.getIsActive()))
                 .orElse(false);
+    }
+
+    public String getUserName(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getName)
+                .orElse("A user");
     }
 }

@@ -2,10 +2,10 @@ package com.bakeaura.notification;
 
 import com.bakeaura.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -15,13 +15,10 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<NotificationDto>>> getNotifications(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<NotificationDto>>> getNotifications(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Notifications fetched",
-                notificationService.getNotifications(userId, page, size)));
+                notificationService.getNotifications(userId)));
     }
 
     @GetMapping("/unread-count")

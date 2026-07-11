@@ -25,7 +25,9 @@ public class CakeDesignAssistantController {
             @Valid @RequestBody CakeDesignPreviewRequestDto dto) {
 
         CakeDesignPreviewResponseDto response = cakeDesignAssistantService.generatePreview(
-                dto.getDescription(), dto.getOccasion(), dto.getReferenceImageBase64());
+                dto.getDescription(), dto.getOccasion(),
+                dto.getServes(), dto.getBudgetMin(), dto.getBudgetMax(),
+                dto.getReferenceImageBase64());
 
         return ResponseEntity.ok(ApiResponse.ok("Design preview generated", response));
     }

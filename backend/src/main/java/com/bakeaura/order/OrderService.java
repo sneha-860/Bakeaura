@@ -135,6 +135,7 @@ public class OrderService {
         orderRequest.setScheduledDeliveryDate(request.getScheduledDeliveryDate());
         orderRequest.setReferralCode(request.getReferralCode());
         orderRequest.setItems(cart.getItems().stream()
+                .filter(item -> request.getSellerId().equals(item.getSellerId()))
                 .map(this::toOrderItemRequest)
                 .toList());
 
@@ -354,6 +355,7 @@ public class OrderService {
 
         return OrderResponseDto.builder()
                 .id(order.getId())
+                .sellerId(order.getSeller().getId())
                 .customerName(order.getCustomer().getName())
                 .sellerName(order.getSeller().getName())
                 .status(order.getStatus())

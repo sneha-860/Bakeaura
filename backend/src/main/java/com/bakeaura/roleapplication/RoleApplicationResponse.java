@@ -14,10 +14,13 @@ public class RoleApplicationResponse {
     private Long userId;
     private String userEmail;
     private String userName;
+    private String userPhone;
     private Role currentRole;
     private Role requestedRole;
     private ApplicationStatus status;
     private String message;
+    private String socialUrl;
+    private Integer followerCount;
     private String reviewNote;
     private String reviewedBy;
     private LocalDateTime reviewedAt;

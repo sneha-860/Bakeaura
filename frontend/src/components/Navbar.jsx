@@ -5,6 +5,7 @@ import { authApi } from '../api/auth';
 import { notificationsApi } from '../api/notifications';
 import { Role } from '../api/enums';
 import { useAuthStore } from '../store/useAuthStore';
+import { createSocketClient } from '../api/websocket';
 import Button from './Button';
 import ApplyRoleModal from './ApplyRoleModal';
 import { roleApplicationsApi } from '../api/roleApplications';
@@ -12,7 +13,7 @@ import { ApplicationStatus } from '../api/enums';
 
 export default function Navbar() {
     const navigate = useNavigate();
-    const { isAuthenticated, role, email, name, logout, cartCount, emailVerified } = useAuthStore();
+    const { isAuthenticated, role, email, name, logout, cartCount, emailVerified, accessToken } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [unread, setUnread] = useState(0);
@@ -28,6 +29,27 @@ export default function Navbar() {
     }, [isAuthenticated, role]);
 
     useEffect(() => {
+        if (!isAuthenticated || !accessToken) return;
+
+        let userId;
+        try {
+            userId = JSON.parse(atob(accessToken.split('.')[1])).sub;
+        } catch {
+            return;
+        }
+
+        const client = createSocketClient();
+        client.onConnect = () => {
+            client.subscribe(`/topic/users/${userId}/notifications`, () => {
+                setUnread((prev) => prev + 1);
+            });
+        };
+        client.activate();
+
+        return () => { client.deactivate(); };
+    }, [isAuthenticated, accessToken]);
+
+    useEffect(() => {
         function handleClickOutside(event) {
             if (profileRef.current && !profileRef.current.contains(event.target)) {
                 setProfileDropdownOpen(false);
@@ -39,7 +61,9 @@ export default function Navbar() {
 
     function submitSearch(event) {
         event.preventDefault();
-        navigate(`/products${query ? `?keyword=${encodeURIComponent(query)}` : ''}`);
+        if (!query.trim()) return;
+        navigate(`/products?keyword=${encodeURIComponent(query.trim())}`);
+        setQuery('');
         setOpen(false);
     }
 

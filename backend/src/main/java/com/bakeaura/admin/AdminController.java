@@ -1,7 +1,11 @@
 package com.bakeaura.admin;
 
 import com.bakeaura.common.ApiResponse;
+import com.bakeaura.enums.ApplicationStatus;
 import com.bakeaura.enums.Role;
+import com.bakeaura.roleapplication.RoleApplicationResponse;
+import com.bakeaura.roleapplication.RoleApplicationReviewRequest;
+import com.bakeaura.roleapplication.RoleApplicationService;
 import com.bakeaura.user.UserDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +31,7 @@ import java.util.List;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
     private final AdminService adminService;
+    private final RoleApplicationService roleApplicationService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<AdminDashboardDto>> dashboard() {
@@ -69,5 +74,32 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Void>> evictCategoriesCache() {
         adminService.evictCategoriesCache();
         return ResponseEntity.ok(ApiResponse.ok("Categories cache cleared", null));
+    }
+
+    @GetMapping("/role-applications")
+    public ResponseEntity<ApiResponse<List<RoleApplicationResponse>>> getApplications(
+            @RequestParam(required = false) ApplicationStatus status) {
+        return ResponseEntity.ok(ApiResponse.ok("Applications fetched",
+                roleApplicationService.getApplications(status)));
+    }
+
+    @PostMapping("/role-applications/{id}/approve")
+    public ResponseEntity<ApiResponse<RoleApplicationResponse>> approveApplication(
+            @PathVariable Long id,
+            @Valid @RequestBody RoleApplicationReviewRequest request,
+            Authentication authentication) {
+        Long adminId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(ApiResponse.ok("Application approved",
+                roleApplicationService.approve(id, adminId, request)));
+    }
+
+    @PostMapping("/role-applications/{id}/reject")
+    public ResponseEntity<ApiResponse<RoleApplicationResponse>> rejectApplication(
+            @PathVariable Long id,
+            @Valid @RequestBody RoleApplicationReviewRequest request,
+            Authentication authentication) {
+        Long adminId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(ApiResponse.ok("Application rejected",
+                roleApplicationService.reject(id, adminId, request)));
     }
 }

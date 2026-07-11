@@ -1,4 +1,4 @@
-import { Bell, Camera, Heart, MapPin, Send, UserRound } from 'lucide-react';
+import { Bell, Camera, Heart, MapPin, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -14,6 +14,7 @@ import { notificationsApi } from '../api/notifications';
 import { roleApplicationsApi } from '../api/roleApplications';
 import { usersApi } from '../api/users';
 import AddressCard from '../components/AddressCard';
+import ApplyRoleModal from '../components/ApplyRoleModal';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
@@ -24,21 +25,21 @@ import { currency, formatDate, titleCase } from '../utils/format';
 const profileSchema = z.object({ name: z.string().min(2), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits').optional().or(z.literal('')), bio: z.string().max(500, 'Bio must be 500 characters or less').optional().or(z.literal('')), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional() });
 const passwordSchema = z.object({ currentPassword: z.string().min(6), newPassword: z.string().min(6) });
 const emailSchema = z.object({ newEmail: z.string().email(), currentPassword: z.string().min(6) });
-const addressSchema = z.object({ 
-  label: z.string().min(1).max(100), 
-  addressLine: z.string().min(1).max(1000), 
-  latitude: z.coerce.number().min(-90).max(90), 
-  longitude: z.coerce.number().min(-180).max(180), 
-  defaultAddress: z.boolean().optional() 
+const addressSchema = z.object({
+  label: z.string().min(1).max(100),
+  addressLine: z.string().min(1).max(1000),
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
+  defaultAddress: z.boolean().optional()
 });
-const applicationSchema = z.object({ requestedRole: z.enum([Role.SELLER, Role.INFLUENCER]), phone: z.string().regex(/^[0-9]{10,15}$/, 'Must be 10–15 digits'), message: z.string().min(10) });
 
 export function ProfilePage() {
-  const { setName, emailVerified } = useAuthStore();
+  const { setName, setEmailVerified } = useAuthStore();
   const [user, setUser] = useState(null);
   const [applications, setApplications] = useState([]);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
   const profileForm = useForm({ resolver: zodResolver(profileSchema) });
   const { setValue } = profileForm;
   const passwordForm = useForm({ resolver: zodResolver(passwordSchema) });
@@ -47,6 +48,7 @@ export function ProfilePage() {
   useEffect(() => {
     usersApi.me().then((me) => {
       setUser(me);
+      setEmailVerified(Boolean(me.isEmailVerified));
       profileForm.reset({ name: me.name, phone: me.phone ?? '', bio: me.bio ?? '', latitude: me.latitude ?? undefined, longitude: me.longitude ?? undefined });
     });
   }, []);
@@ -122,6 +124,7 @@ export function ProfilePage() {
   const hasPendingApplication = applications.some((a) => a.status === 'PENDING');
 
   return (
+    <>
     <div className="page two-column">
       <section>
         <section className="page-hero compact-hero">
@@ -181,8 +184,8 @@ export function ProfilePage() {
         {user?.bio ? <p className="muted" style={{ fontSize: '0.9rem' }}>{user.bio}</p> : null}
         <span className="pill">{user?.role}</span>
         {user?.role !== Role.SELLER && user?.role !== Role.ADMIN && !hasPendingApplication && (
-          emailVerified
-            ? <Link className="btn btn-primary" to="/apply">Apply for a role</Link>
+          user?.isEmailVerified
+            ? <button className="btn btn-primary" onClick={() => setApplyModalOpen(true)}>Apply for a role</button>
             : <Link className="btn btn-ghost" to="/verify-email" style={{ fontSize: '0.85rem' }}>Verify email to apply for a role</Link>
         )}
         {hasPendingApplication && (
@@ -193,6 +196,12 @@ export function ProfilePage() {
         )}
       </aside>
     </div>
+    <ApplyRoleModal
+      open={applyModalOpen}
+      onClose={() => setApplyModalOpen(false)}
+      onApplied={() => roleApplicationsApi.mine().then(setApplications).catch(() => {})}
+    />
+    </>
   );
 }
 
@@ -320,64 +329,90 @@ export function FavouritesPage() {
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
-  const load = () => notificationsApi.list().then(setNotifications).catch(() => setNotifications([]));
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    notificationsApi.list()
+      .then(setNotifications)
+      .catch(() => setNotifications([]))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => { load(); }, []);
+
   async function markRead(id) {
     await notificationsApi.markRead(id);
-    load();
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
   }
+
   async function markAll() {
     await notificationsApi.markAllRead();
-    load();
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }
-  return <div className="page"><section className="section-head"><div><p className="eyebrow"><Bell size={16} /> Updates</p><h1>Notifications</h1></div><Button variant="ghost" onClick={markAll}>Mark all read</Button></section><div className="stack">{notifications.map((item) => <NotificationItem key={item.id} notification={item} onRead={markRead} />)}{!notifications.length ? <EmptyState title="No notifications" /> : null}</div></div>;
+
+  const hasUnread = notifications.some((n) => !n.read);
+
+  return (
+    <div className="page">
+      <section className="section-head">
+        <div>
+          <p className="eyebrow"><Bell size={16} /> Updates</p>
+          <h1>Notifications</h1>
+        </div>
+        {hasUnread && <Button variant="ghost" onClick={markAll}>Mark all read</Button>}
+      </section>
+      <div className="stack">
+        {loading
+          ? [1, 2, 3].map((i) => <div key={i} className="skeleton-card" style={{ height: 72 }} />)
+          : notifications.map((item) => (
+              <NotificationItem key={item.id} notification={item} onRead={markRead} />
+            ))
+        }
+        {!loading && !notifications.length ? <EmptyState title="No notifications yet" /> : null}
+      </div>
+    </div>
+  );
 }
 
 export function RoleApplicationPage() {
-  const { emailVerified } = useAuthStore();
   const [applications, setApplications] = useState([]);
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({ resolver: zodResolver(applicationSchema), defaultValues: { requestedRole: Role.SELLER } });
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
   const load = () => roleApplicationsApi.mine().then(setApplications).catch(() => setApplications([]));
 
   useEffect(() => { load(); }, []);
 
-  useEffect(() => {
-    usersApi.me().then((me) => {
-      if (me?.phone) setValue('phone', me.phone);
-    }).catch(() => {});
-  }, []);
-
-  async function submit(values) {
-    try {
-      await roleApplicationsApi.create(values);
-      reset({ requestedRole: Role.SELLER, phone: '', message: '' });
-      toast.success('Application submitted');
-      load();
-    } catch (error) {
-      toast.error(error?.response?.data?.message || 'Could not submit application');
-    }
-  }
+  const hasPending = applications.some((a) => a.status === 'PENDING');
 
   return (
-    <div className="page two-column">
-      <section><h1>Role applications</h1><div className="stack">{applications.map((app) => <article className="panel" key={app.id}><span className="pill">{app.status}</span><h3>{titleCase(app.requestedRole)}</h3><p>{app.message}</p>{app.reviewNote ? <small>{app.reviewNote}</small> : null}</article>)}{!applications.length ? <EmptyState title="No applications yet" /> : null}</div></section>
-      <aside>
-        {!emailVerified ? (
-          <div className="form-card" style={{ textAlign: 'center', gap: 12, display: 'grid' }}>
-            <h2>Apply</h2>
-            <p className="muted" style={{ fontSize: '0.9rem' }}>You need to verify your email address before applying for a role.</p>
-            <Link className="btn btn-primary" to="/verify-email">Verify email</Link>
-          </div>
-        ) : (
-          <form className="form-card" onSubmit={handleSubmit(submit)}>
-            <h2>Apply</h2>
-            <label className="field"><span>Requested role</span><select className="input" {...register('requestedRole')}><option value={Role.SELLER}>Seller</option><option value={Role.INFLUENCER}>Influencer</option></select></label>
-            <Input label="Phone number" type="tel" placeholder="10–15 digit mobile number" error={errors.phone?.message} {...register('phone')} />
-            <Input label="Message" as="textarea" rows="5" error={errors.message?.message} {...register('message')} />
-            <Button><Send size={16} /> Submit</Button>
-          </form>
+    <div className="page">
+      <section className="page-hero compact-hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <p className="eyebrow">My Account</p>
+          <h1>Role Applications</h1>
+        </div>
+        {!hasPending && (
+          <Button onClick={() => setApplyModalOpen(true)}>Apply for a role</Button>
         )}
-      </aside>
+      </section>
+      <div className="stack">
+        {applications.map((app) => (
+          <article className="panel" key={app.id}>
+            <span className="pill">{app.status}</span>
+            <h3>{titleCase(app.requestedRole)}</h3>
+            {app.message ? <p>{app.message}</p> : null}
+            {app.reviewNote ? <small className="muted">{app.reviewNote}</small> : null}
+          </article>
+        ))}
+        {!applications.length ? <EmptyState title="No applications yet" text="Click 'Apply for a role' to become a seller or creator." /> : null}
+      </div>
+      <ApplyRoleModal
+        open={applyModalOpen}
+        onClose={() => setApplyModalOpen(false)}
+        onApplied={load}
+      />
     </div>
   );
 }

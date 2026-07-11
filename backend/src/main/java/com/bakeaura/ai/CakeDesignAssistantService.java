@@ -3,13 +3,11 @@ package com.bakeaura.ai;
 import com.bakeaura.cloudinary.CloudinaryService;
 import com.bakeaura.customorder.CustomOrderRequest;
 import com.bakeaura.customorder.CustomOrderRequestService;
-import com.bakeaura.exception.ServiceUnavailableException;
 import com.bakeaura.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.Map;
@@ -25,9 +23,18 @@ public class CakeDesignAssistantService {
     private final NotificationService notificationService;
 
     public CakeDesignPreviewResponseDto generatePreview(
-            String description, String occasion, String referenceImageBase64) {
+            String description, String occasion, Integer serves,
+            java.math.BigDecimal budgetMin, java.math.BigDecimal budgetMax,
+            String referenceImageBase64) {
 
-        String prompt = "Occasion: " + occasion + ". Customer request: " + description;
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("Occasion: ").append(occasion).append(". ");
+        if (serves != null) promptBuilder.append("Serves: ").append(serves).append(". ");
+        if (budgetMin != null && budgetMax != null) {
+            promptBuilder.append("Budget: ₹").append(budgetMin).append("–₹").append(budgetMax).append(". ");
+        }
+        promptBuilder.append("Customer request: ").append(description);
+        String prompt = promptBuilder.toString();
 
         String designBrief;
         if (referenceImageBase64 != null && !referenceImageBase64.isBlank()) {
@@ -80,9 +87,9 @@ public class CakeDesignAssistantService {
             Map<String, Object> uploadResult =
                     cloudinaryService.uploadImageBytes(imageBytes, "custom-order-cakes");
             return (String) uploadResult.get("secure_url");
-        } catch (IOException e) {
-            log.error("Failed to upload AI-generated cake image to Cloudinary", e);
-            throw new ServiceUnavailableException("Could not save the generated cake image. Please try again.");
+        } catch (Exception e) {
+            log.warn("Could not upload AI-generated image to Cloudinary — proceeding without image. Cause: {}", e.getMessage());
+            return null;
         }
     }
 }

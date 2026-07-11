@@ -16,5 +16,11 @@ public class CakeDesignPreviewRequestDto {
     @NotBlank(message = "occasion is required")
     private String occasion;
 
+    private Integer serves;
+
+    private java.math.BigDecimal budgetMin;
+
+    private java.math.BigDecimal budgetMax;
+
     private String referenceImageBase64;
 }

@@ -38,6 +38,11 @@ public class RoleApplication {
     @Column(length = 1000)
     private String message;
 
+    // For INFLUENCER applications — admin needs these to verify the applicant
+    private String socialUrl;
+
+    private Integer followerCount;
+
     @Column(length = 1000)
     private String reviewNote;
 

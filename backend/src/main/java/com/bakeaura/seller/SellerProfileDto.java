@@ -14,7 +14,6 @@ public class SellerProfileDto {
     // Fields from User
     private Long id;
     private String name;
-    private String email;
     private Double latitude;
     private Double longitude;
 

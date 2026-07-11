@@ -12,6 +12,8 @@ import java.util.List;
 public interface RoleApplicationRepository extends JpaRepository<RoleApplication, Long> {
     boolean existsByUserAndRequestedRoleAndStatus(User user, Role requestedRole, ApplicationStatus status);
 
+    boolean existsByUserAndStatus(User user, ApplicationStatus status);
+
     List<RoleApplication> findByUserOrderByCreatedAtDesc(User user);
 
     List<RoleApplication> findByStatusOrderByCreatedAtDesc(ApplicationStatus status);

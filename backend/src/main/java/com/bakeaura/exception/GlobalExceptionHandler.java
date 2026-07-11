@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -62,6 +63,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("Database constraint violation", ex);
         return error(HttpStatus.BAD_REQUEST, "Request violates a database constraint", "DATA_INTEGRITY_VIOLATION");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadable(HttpMessageNotReadableException ex) {
+        String msg = ex.getMessage() != null && ex.getMessage().contains("Cannot deserialize value")
+                ? "Invalid value in request body"
+                : "Malformed or unreadable request body";
+        return error(HttpStatus.BAD_REQUEST, msg, "BAD_REQUEST");
     }
 
     @ExceptionHandler(AccessDeniedException.class)

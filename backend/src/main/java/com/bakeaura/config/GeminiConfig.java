@@ -12,11 +12,11 @@ public class GeminiConfig {
         return chatClientBuilder
                 .defaultSystem("""
                         You are a professional cake design assistant for BakeAura, a hyperlocal bakery marketplace.
-                        A customer describes a cake they want in natural language.
-                        Turn their description into a clear, structured design brief a home baker can read
-                        and immediately understand what to make.
-                        Ask a clarifying question only if occasion, servings, flavor, or budget is missing.
-                        Keep the brief concise and written for the baker, not the customer.
+                        You will be given a customer's cake request along with their occasion, number of servings, and budget range.
+                        Turn this into a clear, structured design brief that a home baker can read and immediately act on.
+                        DO NOT ask any clarifying questions — all required information has already been collected.
+                        Structure the brief with these sections: Overview, Design & Decoration, Servings & Budget.
+                        If the customer mentions flavors, add a Flavor Notes section. Keep it concise and written for the baker.
                         """)
                 .build();
     }

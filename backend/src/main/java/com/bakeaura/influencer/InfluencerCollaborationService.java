@@ -4,6 +4,7 @@ import com.bakeaura.enums.CollaborationStatus;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class InfluencerCollaborationService {
 
     private final InfluencerCollaborationRepository collaborationRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public CollaborationResponse requestCollaboration(Long sellerId, Long influencerId,
@@ -50,7 +52,16 @@ public class InfluencerCollaborationService {
         collaboration.setSellerId(sellerId);
         collaboration.setMessage(message);
 
-        return toResponse(collaborationRepository.save(collaboration));
+        CollaborationResponse response = toResponse(collaborationRepository.save(collaboration));
+
+        notificationService.notifyUser(
+                influencerId,
+                "COLLAB_REQUEST",
+                seller.getName() + " has sent you a collaboration request.",
+                null
+        );
+
+        return response;
     }
 
     public List<CollaborationResponse> getMyIncomingRequests(Long influencerId) {
@@ -91,7 +102,19 @@ public class InfluencerCollaborationService {
         }
 
         collaboration.setStatus(newStatus);
-        return toResponse(collaborationRepository.save(collaboration));
+        CollaborationResponse response = toResponse(collaborationRepository.save(collaboration));
+
+        String influencerName = userRepository.findById(influencerId)
+                .map(User::getName)
+                .orElse("The influencer");
+        notificationService.notifyUser(
+                sellerId,
+                newStatus == CollaborationStatus.APPROVED ? "COLLAB_APPROVED" : "COLLAB_REJECTED",
+                influencerName + " has " + (newStatus == CollaborationStatus.APPROVED ? "accepted" : "declined") + " your collaboration request.",
+                null
+        );
+
+        return response;
     }
 
     private CollaborationResponse toResponse(InfluencerCollaboration c) {

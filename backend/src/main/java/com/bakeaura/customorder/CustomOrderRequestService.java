@@ -3,6 +3,7 @@ package com.bakeaura.customorder;
 import com.bakeaura.enums.CustomOrderStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ public class CustomOrderRequestService {
 
     private final CustomOrderRequestRepository customOrderRequestRepository;
     private final UserService userService;
+    private final NotificationService notificationService;
 
     @Transactional
     public CustomOrderRequest submitRequest(
@@ -47,7 +49,17 @@ public class CustomOrderRequestService {
         request.setBudgetMin(budgetMin);
         request.setBudgetMax(budgetMax);
 
-        return customOrderRequestRepository.save(request);
+        CustomOrderRequest saved = customOrderRequestRepository.save(request);
+
+        String customerName = userService.getUserName(customerId);
+        notificationService.notifyUser(
+                sellerId,
+                "CUSTOM_ORDER_REQUEST",
+                customerName + " has sent you a custom cake request.",
+                saved.getId()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -59,7 +71,17 @@ public class CustomOrderRequestService {
         }
 
         request.setStatus(CustomOrderStatus.ACCEPTED);
-        return customOrderRequestRepository.save(request);
+        CustomOrderRequest saved = customOrderRequestRepository.save(request);
+
+        String sellerName = userService.getUserName(sellerId);
+        notificationService.notifyUser(
+                request.getCustomerId(),
+                "CUSTOM_ORDER_ACCEPTED",
+                sellerName + " has accepted your custom cake request.",
+                saved.getId()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -71,7 +93,17 @@ public class CustomOrderRequestService {
         }
 
         request.setStatus(CustomOrderStatus.REJECTED);
-        return customOrderRequestRepository.save(request);
+        CustomOrderRequest saved = customOrderRequestRepository.save(request);
+
+        String sellerName = userService.getUserName(sellerId);
+        notificationService.notifyUser(
+                request.getCustomerId(),
+                "CUSTOM_ORDER_REJECTED",
+                sellerName + " has declined your custom cake request.",
+                saved.getId()
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -84,7 +116,17 @@ public class CustomOrderRequestService {
 
         request.setStatus(CustomOrderStatus.QUOTED);
         request.setSellerQuote(quote);
-        return customOrderRequestRepository.save(request);
+        CustomOrderRequest saved = customOrderRequestRepository.save(request);
+
+        String sellerName = userService.getUserName(sellerId);
+        notificationService.notifyUser(
+                request.getCustomerId(),
+                "CUSTOM_ORDER_QUOTED",
+                sellerName + " sent you a quote of ₹" + quote + " for your custom cake.",
+                saved.getId()
+        );
+
+        return saved;
     }
 
     @Transactional(readOnly = true)

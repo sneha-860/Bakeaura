@@ -1,6 +1,7 @@
 package com.bakeaura.product;
 
 import com.bakeaura.category.CategoryRepository;
+import com.bakeaura.seller.SellerProfileRepository;
 import com.bakeaura.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,11 +25,14 @@ class ProductServiceTest {
     @Mock
     private CategoryRepository categoryRepository;
 
+    @Mock
+    private SellerProfileRepository sellerProfileRepository;
+
     private ProductService productService;
 
     @BeforeEach
     void setUp() {
-        productService = new ProductService(productRepository, userRepository, categoryRepository);
+        productService = new ProductService(productRepository, userRepository, categoryRepository, sellerProfileRepository);
     }
 
     @Test

@@ -21,7 +21,6 @@ public class ProductCreateDto {
     @DecimalMin("0.0")
     private BigDecimal price;
 
-    @NotNull
     @Min(0)
     private Integer stockQuantity;
 

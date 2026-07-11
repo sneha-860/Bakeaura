@@ -174,7 +174,10 @@ public class PaymentService {
             order.setStatus(OrderStatus.CONFIRMED);
             orderRepository.save(order);
             orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
-            notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED", "Payment captured for order #" + order.getId(), order.getId());
+            notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED",
+                    "Payment of ₹" + order.getTotalAmount() + " received for order #" + order.getId() + ".", order.getId());
+            notifyIfUserPresent(order.getCustomer(), "PAYMENT_CONFIRMED",
+                    "Your payment of ₹" + order.getTotalAmount() + " for order #" + order.getId() + " was successful.", order.getId());
         }
 
         return toResponse(payment);
@@ -238,7 +241,10 @@ public class PaymentService {
         orderRepository.save(order);
 
         orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
-        notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED", "Payment captured for order #" + order.getId(), order.getId());
+        notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED",
+                "Payment of ₹" + order.getTotalAmount() + " received for order #" + order.getId() + ".", order.getId());
+        notifyIfUserPresent(order.getCustomer(), "PAYMENT_CONFIRMED",
+                "Your payment of ₹" + order.getTotalAmount() + " for order #" + order.getId() + " was successful.", order.getId());
 
         log.info("Payment captured for order {}", order.getId());
     }

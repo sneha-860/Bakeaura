@@ -29,4 +29,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     // Search by name (case-insensitive)
     List<Product> findByNameContainingIgnoreCase(String keyword);
     // → SELECT * FROM products WHERE LOWER(name) LIKE LOWER('%keyword%')
+
+    long countBySellerId(Long sellerId);
+    // → SELECT COUNT(*) FROM products WHERE seller_id = ?
 }

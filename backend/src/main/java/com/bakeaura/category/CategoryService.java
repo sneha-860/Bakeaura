@@ -18,6 +18,7 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final ProductService productService;
 
+    @Cacheable(value = "categories", key = "'all'")
     public List<CategoryResponseDto> getAllCategories() {
         return categoryRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()

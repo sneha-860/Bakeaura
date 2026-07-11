@@ -177,10 +177,10 @@ class CartServiceTest {
         givenUser();
         givenRedisValueOperations();
         CartDto existingCart = new CartDto("customer@example.com", new ArrayList<>(List.of(
-                new CartItemDto(1L, "Deleted", 1, new BigDecimal("10.00")),
-                new CartItemDto(2L, "Unavailable", 1, new BigDecimal("20.00")),
-                new CartItemDto(3L, "Out", 1, new BigDecimal("30.00")),
-                new CartItemDto(4L, "Kept", 1, new BigDecimal("40.00"))
+                new CartItemDto(1L, "Deleted", 1, new BigDecimal("10.00"), null),
+                new CartItemDto(2L, "Unavailable", 1, new BigDecimal("20.00"), null),
+                new CartItemDto(3L, "Out", 1, new BigDecimal("30.00"), null),
+                new CartItemDto(4L, "Kept", 1, new BigDecimal("40.00"), null)
         )));
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
@@ -209,8 +209,8 @@ class CartServiceTest {
         givenUser();
         givenRedisValueOperations();
         CartDto existingCart = new CartDto("customer@example.com", new ArrayList<>(List.of(
-                new CartItemDto(1L, "Cake", 1, new BigDecimal("100.00")),
-                new CartItemDto(2L, "Cookie", 2, new BigDecimal("50.00"))
+                new CartItemDto(1L, "Cake", 1, new BigDecimal("100.00"), null),
+                new CartItemDto(2L, "Cookie", 2, new BigDecimal("50.00"), null)
         )));
 
         when(valueOperations.get("cart:10")).thenReturn(existingCart);
@@ -246,7 +246,7 @@ class CartServiceTest {
 
     private CartDto cartWithItem(Long productId, String productName, int quantity, String unitPrice) {
         return new CartDto("customer@example.com", new ArrayList<>(List.of(
-                new CartItemDto(productId, productName, quantity, new BigDecimal(unitPrice))
+                new CartItemDto(productId, productName, quantity, new BigDecimal(unitPrice), null)
         )));
     }
 }

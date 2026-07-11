@@ -3,6 +3,7 @@ package com.bakeaura.seller;
 import com.bakeaura.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,6 +36,7 @@ public class SellerController {
     }
 
     @PatchMapping("/profile")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<SellerProfileDto>> updateProfile(
             Authentication authentication,
             @RequestBody UpdateSellerProfileDto request) {
@@ -44,6 +46,7 @@ public class SellerController {
     }
 
     @PatchMapping("/toggle-open")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<SellerProfileDto>> toggleOpen(
             Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
@@ -52,6 +55,7 @@ public class SellerController {
     }
 
     @GetMapping("/dashboard/analytics")
+    @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<SellerAnalyticsDto>> getDashboardAnalytics(
             Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());

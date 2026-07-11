@@ -8,7 +8,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { OrderStatus, Role } from '../api/enums';
 import { ordersApi } from '../api/orders';
 import { paymentsApi } from '../api/payments';
-import { productsApi } from '../api/products';
 import { reviewsApi } from '../api/reviews';
 import { createSocketClient } from '../api/websocket';
 import Button from '../components/Button';
@@ -22,6 +21,15 @@ import { currency, formatDate, titleCase } from '../utils/format';
 
 const statuses = Object.values(OrderStatus);
 const reviewSchema = z.object({ rating: z.coerce.number().min(1).max(5), comment: z.string().min(3) });
+
+const VALID_NEXT = {
+  [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+  [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
+  [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  [OrderStatus.CANCELLED]: []
+};
 
 export function MyOrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -78,11 +86,9 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     if (!order || order.status !== OrderStatus.DELIVERED || role !== Role.CUSTOMER) return;
-    const firstItem = order.items?.[0];
-    if (!firstItem) return;
+    if (!order.sellerId) return;
     let mounted = true;
-    productsApi.get(firstItem.productId)
-      .then((product) => reviewsApi.sellerReviews(product.sellerId))
+    reviewsApi.sellerReviews(order.sellerId)
       .then((reviews) => {
         if (!mounted) return;
         setMyReview((reviews || []).find((review) => review.orderId === order.id) || null);
@@ -177,7 +183,7 @@ export function OrderDetailPage() {
         <p>Estimated delivery: {order.estimatedDeliveryMinutes || 'N/A'} minutes</p>
         <p>Placed {formatDate(order.createdAt)}</p>
         <PaymentStatusBadge status={payment?.status} />
-        {[Role.SELLER, Role.ADMIN].includes(role) ? <div className="stack">{statuses.filter((status) => status !== order.status).map((status) => <Button key={status} variant="ghost" onClick={() => updateStatus(status)}>{titleCase(status)}</Button>)}</div> : null}
+        {[Role.SELLER, Role.ADMIN].includes(role) && VALID_NEXT[order.status]?.length ? <div className="stack">{VALID_NEXT[order.status].map((status) => <Button key={status} variant="ghost" onClick={() => updateStatus(status)}>{titleCase(status)}</Button>)}</div> : null}
       </aside>
     </div>
   );

@@ -5,6 +5,7 @@ import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.influencer.InfluencerProfileService;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.referral.ReferralCodeService;
 import com.bakeaura.seller.SellerService;
 import com.bakeaura.user.User;
@@ -25,6 +26,7 @@ public class RoleApplicationService {
     private final InfluencerProfileService influencerProfileService;
     private final ReferralCodeService referralCodeService;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
 
     @Transactional
@@ -40,15 +42,28 @@ public class RoleApplicationService {
             throw new BadRequestException("Only SELLER or INFLUENCER applications are allowed");
         }
 
-        if (user.getRole() == requestedRole) {
-            throw new BadRequestException("User already has requested role");
+        // Block if user already has a non-customer role — upgrading roles is not self-service
+        if (user.getRole() == Role.SELLER || user.getRole() == Role.INFLUENCER) {
+            if (user.getRole() == requestedRole) {
+                throw new BadRequestException("You already have the " + requestedRole.name().toLowerCase() + " role");
+            }
+            throw new BadRequestException("You already have the " + user.getRole().name().toLowerCase() +
+                    " role. Contact support to request a role change.");
         }
 
-        boolean hasPendingApplication = roleApplicationRepository
-                .existsByUserAndRequestedRoleAndStatus(user, requestedRole, ApplicationStatus.PENDING);
+        // Block if any application (for any role) is already pending
+        if (roleApplicationRepository.existsByUserAndStatus(user, ApplicationStatus.PENDING)) {
+            throw new BadRequestException("You already have a pending application. Please wait for it to be reviewed.");
+        }
 
-        if (hasPendingApplication) {
-            throw new BadRequestException("Application is already pending");
+        // Role-specific validation — admins need structured proof to verify applicants
+        if (requestedRole == Role.INFLUENCER) {
+            if (request.getSocialUrl() == null || request.getSocialUrl().isBlank()) {
+                throw new BadRequestException("An Instagram or YouTube URL is required for influencer applications so we can verify your audience");
+            }
+            if (request.getFollowerCount() == null || request.getFollowerCount() < 1000) {
+                throw new BadRequestException("You need at least 1,000 followers to apply as an influencer on Bakeaura");
+            }
         }
 
         user.setPhone(request.getPhone().trim());
@@ -59,8 +74,28 @@ public class RoleApplicationService {
         application.setRequestedRole(requestedRole);
         application.setStatus(ApplicationStatus.PENDING);
         application.setMessage(request.getMessage());
+        application.setSocialUrl(request.getSocialUrl());
+        application.setFollowerCount(request.getFollowerCount());
 
-        return toResponse(roleApplicationRepository.save(application));
+        RoleApplicationResponse response = toResponse(roleApplicationRepository.save(application));
+
+        notificationService.notifyUser(
+                userId,
+                "APPLICATION_SUBMITTED",
+                "Your " + requestedRole.name().toLowerCase() + " application has been submitted and is under review. We'll notify you once it's reviewed.",
+                null
+        );
+
+        userRepository.findByRoleAndIsActiveTrue(Role.ADMIN).forEach(admin ->
+                notificationService.notifyUser(
+                        admin.getId(),
+                        "NEW_ROLE_APPLICATION",
+                        user.getName() + " has applied to become a " + requestedRole.name().toLowerCase() + ".",
+                        null
+                )
+        );
+
+        return response;
     }
 
     public List<RoleApplicationResponse> getMyApplications(Long userId) {
@@ -110,7 +145,17 @@ public class RoleApplicationService {
             referralCodeService.generateAndSaveReferralCode(user);
         }
 
-        return toResponse(roleApplicationRepository.save(application));
+        RoleApplicationResponse response = toResponse(roleApplicationRepository.save(application));
+
+        notificationService.notifyUser(
+                user.getId(),
+                "ROLE_APPROVED",
+                "Your " + application.getRequestedRole().name().toLowerCase() +
+                        " application has been approved! Log out and log back in to activate your new role.",
+                null
+        );
+
+        return response;
     }
 
     @Transactional
@@ -126,7 +171,20 @@ public class RoleApplicationService {
         application.setReviewedBy(adminEmail);
         application.setReviewedAt(LocalDateTime.now());
 
-        return toResponse(roleApplicationRepository.save(application));
+        RoleApplicationResponse response = toResponse(roleApplicationRepository.save(application));
+
+        String rejectionMessage = "Your " + application.getRequestedRole().name().toLowerCase() + " application was not approved." +
+                (request.getReviewNote() != null && !request.getReviewNote().isBlank()
+                        ? " Admin note: " + request.getReviewNote()
+                        : " You may apply again after addressing any issues.");
+        notificationService.notifyUser(
+                application.getUser().getId(),
+                "ROLE_REJECTED",
+                rejectionMessage,
+                null
+        );
+
+        return response;
     }
 
     private User getActiveUserById(Long userId) {
@@ -157,10 +215,13 @@ public class RoleApplicationService {
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
+                user.getPhone(),
                 user.getRole(),
                 application.getRequestedRole(),
                 application.getStatus(),
                 application.getMessage(),
+                application.getSocialUrl(),
+                application.getFollowerCount(),
                 application.getReviewNote(),
                 application.getReviewedBy(),
                 application.getReviewedAt(),

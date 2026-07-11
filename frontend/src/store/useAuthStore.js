@@ -33,7 +33,7 @@ export const useAuthStore = create(
                     emailVerified: false,
                     cartCount: 0
                 }),
-            setEmailVerified: () => set({ emailVerified: true }),
+            setEmailVerified: (val = true) => set({ emailVerified: Boolean(val) }),
             setCartCount: (count) => set({ cartCount: count }),
             setName: (name) => set({ name })
         }),

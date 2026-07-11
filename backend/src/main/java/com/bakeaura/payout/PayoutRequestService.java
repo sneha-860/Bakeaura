@@ -3,6 +3,7 @@ package com.bakeaura.payout;
 import com.bakeaura.enums.PayoutStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ public class PayoutRequestService {
 
     private final PayoutRequestRepository payoutRequestRepository;
     private final WalletService walletService;
+    private final NotificationService notificationService;
 
     @Transactional
     public PayoutRequest submitRequest(Long influencerId, BigDecimal amount, String upiId) {
@@ -58,7 +60,16 @@ public class PayoutRequestService {
         request.setProcessedBy(adminId);
         request.setProcessedAt(LocalDateTime.now());
 
-        return payoutRequestRepository.save(request);
+        PayoutRequest saved = payoutRequestRepository.save(request);
+
+        notificationService.notifyUser(
+                request.getInfluencerId(),
+                "PAYOUT_APPROVED",
+                "Your payout request of ₹" + request.getAmount() + " has been approved and will be transferred to your UPI shortly.",
+                null
+        );
+
+        return saved;
     }
 
     @Transactional
@@ -76,7 +87,17 @@ public class PayoutRequestService {
         request.setProcessedAt(LocalDateTime.now());
         request.setAdminNote(note);
 
-        return payoutRequestRepository.save(request);
+        PayoutRequest saved = payoutRequestRepository.save(request);
+
+        notificationService.notifyUser(
+                request.getInfluencerId(),
+                "PAYOUT_REJECTED",
+                "Your payout request of ₹" + request.getAmount() + " was not approved." +
+                        (note != null && !note.isBlank() ? " Reason: " + note : ""),
+                null
+        );
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -108,6 +129,15 @@ public class PayoutRequestService {
         request.setProcessedBy(adminId);
         request.setProcessedAt(LocalDateTime.now());
 
-        return payoutRequestRepository.save(request);
+        PayoutRequest saved = payoutRequestRepository.save(request);
+
+        notificationService.notifyUser(
+                request.getInfluencerId(),
+                "PAYOUT_PAID",
+                "₹" + request.getAmount() + " has been transferred to your UPI account.",
+                null
+        );
+
+        return saved;
     }
 }

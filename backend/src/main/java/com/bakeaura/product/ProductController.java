@@ -61,6 +61,15 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.ok("Product updated", product));
     }
 
+    @PatchMapping("/{id}/toggle-available")
+    @PreAuthorize("hasRole('SELLER')")
+    public ResponseEntity<ApiResponse<ProductDto>> toggleAvailable(
+            @PathVariable Long id,
+            Authentication auth) {
+        ProductDto product = productService.toggleAvailability(id, Long.parseLong(auth.getName()));
+        return ResponseEntity.ok(ApiResponse.ok("Product availability toggled", product));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<Void>> deleteProduct(

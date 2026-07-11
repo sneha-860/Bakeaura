@@ -9,5 +9,6 @@ export const productsApi = {
   get: (id) => api.get(`/products/${id}`).then(data),
   create: (body) => api.post('/products', body).then(data),
   update: (id, body) => api.put(`/products/${id}`, body).then(data),
-  remove: (id) => api.delete(`/products/${id}`).then(data)
+  remove: (id) => api.delete(`/products/${id}`).then(data),
+  toggleAvailable: (id) => api.patch(`/products/${id}/toggle-available`).then(data)
 };

@@ -65,19 +65,27 @@ export default function ProductDetailPage() {
         <div className="detail-copy">
           <p className="eyebrow">{product.categoryName}</p>
           <h1>{product.name}</h1>
-          <p className="price">{currency(product.price)}</p>
-          <p>{product.description}</p>
+          <div className="price-row">
+            <p className="price">{currency(product.price)}</p>
+            <span className={product.isAvailable ? 'pill success' : 'pill danger'}>
+              {product.isAvailable ? (product.stockQuantity != null ? `${product.stockQuantity} in stock` : 'In stock') : 'Unavailable'}
+            </span>
+            {product.isPreOrderOnly ? <span className="pill">Pre-order only</span> : null}
+          </div>
+          {product.isPreOrderOnly && product.minAdvanceDays ? (
+            <p className="muted" style={{ fontSize: '0.85rem' }}>Order at least {product.minAdvanceDays} day{product.minAdvanceDays > 1 ? 's' : ''} in advance</p>
+          ) : null}
+          {product.description ? <p className="muted">{product.description}</p> : null}
           <Link className="seller-card-inline" to={`/sellers/${product.sellerId}`}>
             Baked by <strong>{product.sellerName}</strong>
             {sellerSummary?.reviewCount > 0 ? <RatingStars value={sellerSummary.averageRating} count={sellerSummary.reviewCount} /> : null}
           </Link>
-          <span className={product.isAvailable ? 'pill success' : 'pill danger'}>{product.isAvailable ? `${product.stockQuantity} in stock` : 'Unavailable'}</span>
-          <div className="quantity-row">
-            <Button variant="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus size={16} /></Button>
-            <strong>{quantity}</strong>
-            <Button variant="icon" onClick={() => setQuantity(quantity + 1)}><Plus size={16} /></Button>
-          </div>
-          <div className="hero-actions">
+          <div className="action-group">
+            <div className="quantity-row">
+              <Button variant="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus size={16} /></Button>
+              <strong>{quantity}</strong>
+              <Button variant="icon" onClick={() => setQuantity(quantity + 1)}><Plus size={16} /></Button>
+            </div>
             {role === Role.CUSTOMER ? <Button onClick={addCart}><ShoppingBag size={17} /> Add to cart</Button> : null}
             {isAuthenticated ? <Button variant="ghost" onClick={toggleFavorite}><Heart size={17} fill={favorite ? 'currentColor' : 'none'} /> {favorite ? 'Saved' : 'Save'}</Button> : null}
           </div>

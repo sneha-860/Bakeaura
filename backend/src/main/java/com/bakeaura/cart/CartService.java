@@ -73,13 +73,15 @@ public class CartService {
             existing.get().setProductName(product.getName());
             existing.get().setQuantity(newQuantity);
             existing.get().setUnitPrice(product.getPrice());
+            existing.get().setSellerId(product.getSeller().getId());
         } else {
             validateStock(product, quantity);
             cart.getItems().add(new CartItemDto(
                     product.getId(),
                     product.getName(),
                     quantity,
-                    product.getPrice()
+                    product.getPrice(),
+                    product.getSeller().getId()
             ));
         }
 
@@ -114,6 +116,7 @@ public class CartService {
         item.setProductName(product.getName());
         item.setQuantity(quantity);
         item.setUnitPrice(product.getPrice());
+        item.setSellerId(product.getSeller().getId());
 
         saveCart(user, cart);
         return cart;
@@ -196,6 +199,7 @@ public class CartService {
 
             item.setProductName(product.getName());
             item.setUnitPrice(product.getPrice());
+            item.setSellerId(product.getSeller().getId());
         }
 
         return cart;

@@ -54,7 +54,7 @@ class CartControllerTest {
     @WithMockUser(username = "1", roles = "CUSTOMER")
     void customerCanGetCart() throws Exception {
         CartDto cart = new CartDto("customer@example.com", List.of(
-                new CartItemDto(1L, "Cake", 2, new BigDecimal("100.00"))
+                new CartItemDto(1L, "Cake", 2, new BigDecimal("100.00"), null)
         ));
         when(cartService.getCart(1L)).thenReturn(cart);
 
@@ -105,7 +105,7 @@ class CartControllerTest {
     @WithMockUser(username = "1", roles = "CUSTOMER")
     void addItemPassesAuthenticatedEmailProductIdAndQuantityToService() throws Exception {
         CartDto cart = new CartDto("customer@example.com", List.of(
-                new CartItemDto(5L, "Cookie", 3, new BigDecimal("50.00"))
+                new CartItemDto(5L, "Cookie", 3, new BigDecimal("50.00"), null)
         ));
         when(cartService.addItem(1L, 5L, 3)).thenReturn(cart);
 
