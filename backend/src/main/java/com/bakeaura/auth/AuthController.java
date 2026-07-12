@@ -1,18 +1,17 @@
 package com.bakeaura.auth;
 
 import com.bakeaura.common.ApiResponse;
+import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.user.UserService;
+import com.bakeaura.user.ChangeEmailRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import com.bakeaura.user.ChangeEmailRequest;
+import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -20,6 +19,9 @@ import com.bakeaura.user.ChangeEmailRequest;
 public class AuthController {
     private final AuthService authService;
     private final UserService userService;
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
@@ -42,16 +44,37 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok("Logged out", null));
     }
 
+    // Email link points to this backend endpoint.
+    // Backend verifies the token and redirects the browser to the frontend.
+    // This avoids Gmail stripping query params from localhost links during its safety scan.
     @GetMapping("/verify-email")
-    public ResponseEntity<ApiResponse<Void>> verifyEmail(@RequestParam String token) {
-        authService.verifyEmail(token);
-        return ResponseEntity.ok(ApiResponse.ok("Email verified", null));
+    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
+        try {
+            authService.verifyEmail(token);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(frontendUrl + "/verify-email?verified=true"))
+                    .build();
+        } catch (BadRequestException e) {
+            String code = e.getMessage().toLowerCase().contains("expired") ? "expired" : "invalid";
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(frontendUrl + "/verify-email?error=" + code))
+                    .build();
+        }
     }
 
     @GetMapping("/verify-email-change")
-    public ResponseEntity<ApiResponse<Void>> verifyEmailChange(@RequestParam String token) {
-        userService.confirmEmailChange(token);
-        return ResponseEntity.ok(ApiResponse.ok("Email updated successfully", null));
+    public ResponseEntity<Void> verifyEmailChange(@RequestParam String token) {
+        try {
+            userService.confirmEmailChange(token);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(frontendUrl + "/verify-email-change?verified=true"))
+                    .build();
+        } catch (BadRequestException e) {
+            String code = e.getMessage().toLowerCase().contains("expired") ? "expired" : "invalid";
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(frontendUrl + "/verify-email-change?error=" + code))
+                    .build();
+        }
     }
 
     @PostMapping("/resend-verification")

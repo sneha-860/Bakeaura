@@ -2,6 +2,8 @@ import { Bell, Heart, LogOut, Menu, Search, ShoppingBag, UserRound, X, ChevronDo
 import { useEffect, useState, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { authApi } from '../api/auth';
+import { cartApi } from '../api/cart';
+import { favouritesApi } from '../api/favourites';
 import { notificationsApi } from '../api/notifications';
 import { Role } from '../api/enums';
 import { useAuthStore } from '../store/useAuthStore';
@@ -13,10 +15,11 @@ import { ApplicationStatus } from '../api/enums';
 
 export default function Navbar() {
     const navigate = useNavigate();
-    const { isAuthenticated, role, email, name, logout, cartCount, emailVerified, accessToken } = useAuthStore();
+    const { isAuthenticated, role, email, name, logout, cartCount, setCartCount, emailVerified, accessToken } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [unread, setUnread] = useState(0);
+    const [favCount, setFavCount] = useState(0);
     const [roleModalOpen, setRoleModalOpen] = useState(false);
     const [myApplications, setMyApplications] = useState([]);
     const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -26,6 +29,10 @@ export default function Navbar() {
         if (!isAuthenticated) return;
         notificationsApi.unreadCount().then((res) => setUnread(res?.unreadCount || 0)).catch(() => {});
         roleApplicationsApi.mine().then((res) => setMyApplications(res || [])).catch(() => {});
+        favouritesApi.list().then((list) => setFavCount(list?.length || 0)).catch(() => {});
+        if (role === Role.CUSTOMER) {
+            cartApi.get().then((cart) => setCartCount(cart?.items?.length || 0)).catch(() => {});
+        }
     }, [isAuthenticated, role]);
 
     useEffect(() => {
@@ -128,6 +135,7 @@ export default function Navbar() {
                         </Link>
                         <Link className="icon-link" to="/favourites" aria-label="Favorites">
                             <Heart size={18} />
+                            {favCount ? <span>{favCount}</span> : null}
                         </Link>
                         {role === Role.CUSTOMER ? (
                             <Link className="icon-link" to="/cart" aria-label="Cart">

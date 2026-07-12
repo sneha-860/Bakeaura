@@ -32,6 +32,9 @@ public class Payment {
     private String razorpayPaymentId;    // Filled in after payment
     private String razorpaySignature;    // The HMAC signature from Razorpay
 
+    @Version
+    private Long version;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentStatus status;

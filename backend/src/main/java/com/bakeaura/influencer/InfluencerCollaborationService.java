@@ -58,7 +58,7 @@ public class InfluencerCollaborationService {
                 influencerId,
                 "COLLAB_REQUEST",
                 seller.getName() + " has sent you a collaboration request.",
-                null
+                collaboration.getId()
         );
 
         return response;
@@ -111,7 +111,7 @@ public class InfluencerCollaborationService {
                 sellerId,
                 newStatus == CollaborationStatus.APPROVED ? "COLLAB_APPROVED" : "COLLAB_REJECTED",
                 influencerName + " has " + (newStatus == CollaborationStatus.APPROVED ? "accepted" : "declined") + " your collaboration request.",
-                null
+                collaboration.getId()
         );
 
         return response;

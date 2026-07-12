@@ -1,6 +1,7 @@
 package com.bakeaura.order;
 
 import com.bakeaura.enums.OrderStatus;
+import com.bakeaura.enums.PaymentStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -18,8 +19,10 @@ public class OrderResponseDto {
     private OrderStatus status;
     private BigDecimal totalAmount;
     private String deliveryAddress;
+    private String deliveryInstructions;
     private Integer estimatedDeliveryMinutes;
     private String razorpayOrderId;
+    private PaymentStatus paymentStatus;
     private List<OrderItemResponse> items;
     private LocalDateTime createdAt;
 

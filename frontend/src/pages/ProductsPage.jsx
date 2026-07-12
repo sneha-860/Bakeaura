@@ -54,7 +54,6 @@ export default function ProductsPage() {
     const page = unwrapPage(payload);
     setProducts(page.items);
     setTotalPages(page.totalPages);
-    setTotalCount(page.totalItems ?? page.items.length);
     const sellerIds = [...new Set(page.items.map((p) => p.sellerId).filter(Boolean))];
     const pairs = await Promise.all(
       sellerIds.map((id) => reviewsApi.sellerSummary(id).then((s) => [id, s]).catch(() => [id, null]))

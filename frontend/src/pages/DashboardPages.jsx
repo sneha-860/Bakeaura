@@ -1,7 +1,7 @@
 import { Package, ShoppingBag, Tag, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,6 +24,7 @@ import EmptyState from '../components/EmptyState';
 import Input from '../components/Input';
 import Modal from '../components/Modal';
 import OrderStatusBadge from '../components/OrderStatusBadge';
+import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import ProductCard from '../components/ProductCard';
 import { OrderList } from './OrdersPages';
 import { currency, formatDate, titleCase } from '../utils/format';
@@ -67,6 +68,17 @@ const influencerProfileSchema = z.object({
     z.number().int().positive().nullable().optional()
   )
 });
+
+// Seller-accessible status transitions. PENDING → CONFIRMED is intentionally absent:
+// only PaymentService sets CONFIRMED after payment capture.
+const SELLER_NEXT = {
+  [OrderStatus.PENDING]: [OrderStatus.CANCELLED],
+  [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+  [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
+  [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  [OrderStatus.CANCELLED]: []
+};
 
 export function SellerDashboardPage() {
   const [me, setMe] = useState(null);
@@ -184,7 +196,7 @@ export function SellerDashboardPage() {
 
       <Stats cards={[
         ['Products', products.length, <Package />],
-        ['Pending orders', orders.filter((o) => o.status === OrderStatus.PENDING).length, <ShoppingBag />],
+        ['New orders', orders.filter((o) => o.status === OrderStatus.CONFIRMED).length, <ShoppingBag />],
         ['Delivered revenue', currency(gross), <Users />]
       ]} />
 
@@ -203,7 +215,7 @@ export function SellerDashboardPage() {
         {shopProfile?.shopName && !editingProfile ? (
           <div className="form-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
+              <h2>Shop profile</h2>
               <Button variant="ghost" type="button" onClick={() => setEditingProfile(true)}>Edit</Button>
             </div>
             <div>
@@ -226,7 +238,7 @@ export function SellerDashboardPage() {
         ) : (
           <form className="form-card" onSubmit={shopForm.handleSubmit(saveShopProfile)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.25rem' }}>Shop profile</h2>
+              <h2>Shop profile</h2>
               {shopProfile?.shopName ? <Button variant="ghost" type="button" onClick={() => setEditingProfile(false)}>Cancel</Button> : null}
             </div>
             <Input label="Shop name" error={shopForm.formState.errors.shopName?.message} {...shopForm.register('shopName')} />
@@ -333,7 +345,7 @@ export function MyProductsPage() {
       <Modal open={Boolean(deleteTarget)} title="Delete product" onClose={() => setDeleteTarget(null)}>
         <div className="form-card">
           <p>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.</p>
-          <div className="hero-actions">
+          <div className="modal-actions">
             <Button onClick={confirmDelete}>Delete</Button>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           </div>
@@ -368,12 +380,27 @@ export function IncomingOrdersPage() {
       <div className="stack">
         {orders.map((order) => (
           <article className="order-card" key={order.id}>
-            <div><h3>Order #{order.id}</h3><p>{order.customerName}</p></div>
-            <OrderStatusBadge status={order.status} />
+            <div>
+              <h3>Order #{order.id}</h3>
+              <p>{order.customerName}</p>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <OrderStatusBadge status={order.status} />
+              {order.paymentStatus && <PaymentStatusBadge status={order.paymentStatus} />}
+              {order.status === OrderStatus.PENDING && (
+                <span className="pill" style={{ background: 'var(--cream)', border: '1px solid var(--border)' }}>Awaiting payment</span>
+              )}
+            </div>
             <strong>{currency(order.totalAmount)}</strong>
-            <select className="input compact-input" value={order.status} onChange={(event) => update(order.id, event.target.value)}>
-              {Object.values(OrderStatus).map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
-            </select>
+            {SELLER_NEXT[order.status]?.length > 0 ? (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {SELLER_NEXT[order.status].map((nextStatus) => (
+                  <Button key={nextStatus} variant="ghost" onClick={() => update(order.id, nextStatus)}>
+                    {titleCase(nextStatus)}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
         {!orders.length ? <EmptyState title="No orders found" /> : null}
@@ -387,9 +414,21 @@ export function SellerCustomOrdersPage() {
   const [requests, setRequests] = useState([]);
   const [quoting, setQuoting] = useState(null);
   const [quoteAmount, setQuoteAmount] = useState('');
+  const [searchParams] = useSearchParams();
+  const highlight = searchParams.get('highlight');
 
   const load = () => customOrdersApi.sellerAll().then(setRequests).catch(() => setRequests([]));
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!highlight || !requests.length) return;
+    const el = document.querySelector(`[data-id="${highlight}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('notif-highlight');
+    const timer = setTimeout(() => el.classList.remove('notif-highlight'), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight, requests]);
 
   const visible = status ? requests.filter((request) => request.status === status) : requests;
 
@@ -434,14 +473,14 @@ export function SellerCustomOrdersPage() {
       </div>
       <div className="stack">
         {visible.map((request) => (
-          <article className="panel" key={request.id}>
+          <article className="panel" key={request.id} data-id={request.id}>
             <span className="pill">{titleCase(request.status)}</span>
             <h3>{request.occasion} · serves {request.serves}</h3>
             <p>{request.designBrief}</p>
             <small>Budget ₹{request.budgetMin}–₹{request.budgetMax}</small>
             {request.status === 'QUOTED' ? <p><strong>Your quote: {currency(request.sellerQuote)}</strong></p> : null}
             {request.status === CustomOrderStatus.PENDING ? (
-              <div className="hero-actions">
+              <div className="modal-actions">
                 <Button onClick={() => setQuoting(request)}>Send quote</Button>
                 <Button variant="ghost" onClick={() => accept(request.id)}>Accept</Button>
                 <Button variant="ghost" onClick={() => reject(request.id)}>Reject</Button>
@@ -487,11 +526,11 @@ export function AdminDashboardPage() {
   }
 
   const statCards = [
-    { label: 'Total Users', value: dashboard?.users || 0, icon: <Users size={24} />, color: '#3b82f6' },
-    { label: 'Products', value: dashboard?.products || 0, icon: <Package size={24} />, color: '#10b981' },
-    { label: 'Orders', value: dashboard?.orders || 0, icon: <ShoppingBag size={24} />, color: '#f59e0b' },
-    { label: 'Payments', value: dashboard?.payments || 0, icon: <Package size={24} />, color: '#8b5cf6' },
-    { label: 'Categories', value: dashboard?.categories || 0, icon: <Package size={24} />, color: '#ec4899' }
+    { label: 'Total Users', value: dashboard?.users || 0, icon: <Users size={24} />, color: 'var(--sienna)' },
+    { label: 'Products', value: dashboard?.products || 0, icon: <Package size={24} />, color: 'var(--gold)' },
+    { label: 'Orders', value: dashboard?.orders || 0, icon: <ShoppingBag size={24} />, color: 'var(--mocha)' },
+    { label: 'Payments', value: dashboard?.payments || 0, icon: <Package size={24} />, color: 'var(--espresso)' },
+    { label: 'Categories', value: dashboard?.categories || 0, icon: <Tag size={24} />, color: 'var(--sage)' }
   ];
 
   return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">Admin</p><h1>Platform overview</h1></section><div className="stats-grid">{statCards.map((card) => <article className="stat-card" key={card.label} style={{ borderColor: card.color }}><span style={{ color: card.color }}>{card.icon}</span><strong>{card.value}</strong><small>{card.label}</small></article>)}</div><section className="section"><h2>Quick Actions</h2><div className="action-grid"><Link to="/admin/users" className="action-card"><Users size={32} /><span>Manage Users</span></Link><Link to="/admin/applications" className="action-card"><Package size={32} /><span>Review Applications</span></Link><Link to="/admin/categories" className="action-card"><Tag size={32} /><span>Manage Categories</span></Link><Link to="/admin/payouts" className="action-card"><ShoppingBag size={32} /><span>Influencer Payouts</span></Link></div></section></div>;
@@ -605,7 +644,7 @@ export function AdminUsersPage() {
       <Modal open={Boolean(confirmModal)} title="Confirm action" onClose={() => setConfirmModal(null)}>
         <div className="form-card">
           <p>{confirmModal?.message}</p>
-          <div className="hero-actions">
+          <div className="modal-actions">
             <Button onClick={confirmModal?.onConfirm}>Confirm</Button>
             <Button variant="ghost" onClick={() => setConfirmModal(null)}>Cancel</Button>
           </div>
@@ -618,11 +657,11 @@ export function AdminUsersPage() {
 export function AdminApplicationsPage() {
   const [status, setStatus] = useState(ApplicationStatus.PENDING);
   const [applications, setApplications] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -640,81 +679,142 @@ export function AdminApplicationsPage() {
 
   useEffect(load, [status]);
 
-  async function review(action) {
-    setActionLoading(true);
+  async function approve(app) {
+    setActionLoading(app.id);
     try {
-      action === 'approve'
-        ? await roleApplicationsApi.approve(selected.id, note)
-        : await roleApplicationsApi.reject(selected.id, note);
-      toast.success(action === 'approve' ? 'Application approved' : 'Application rejected');
-      setSelected(null);
+      await roleApplicationsApi.approve(app.id, '');
+      toast.success('Application approved');
+      load();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to approve application');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function rejectApplication() {
+    if (!rejectTarget) return;
+    setActionLoading(rejectTarget.id);
+    try {
+      await roleApplicationsApi.reject(rejectTarget.id, note);
+      toast.success('Application rejected');
+      setRejectTarget(null);
       setNote('');
       load();
     } catch (err) {
-      toast.error(err?.response?.data?.message || `Failed to ${action} application`);
+      toast.error(err?.response?.data?.message || 'Failed to reject application');
     } finally {
-      setActionLoading(false);
+      setActionLoading(null);
     }
   }
+
+  const countBadgeStyle = status === ApplicationStatus.PENDING
+    ? { background: '#fff0cf', color: '#815b06' }
+    : status === ApplicationStatus.APPROVED
+    ? { background: '#e2f1df', color: '#315b2b' }
+    : { background: '#ffe2dd', color: '#9f2d20' };
+
+  const countLabel = status === ApplicationStatus.PENDING
+    ? `${applications.length} pending`
+    : `${applications.length} ${status.toLowerCase()}`;
 
   return (
     <div className="page">
       <section className="section-head">
         <div><p className="eyebrow">Admin</p><h1>Applications</h1></div>
-        <select className="input compact-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-          {Object.values(ApplicationStatus).map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
+        <div className="apps-filter-bar">
+          <span className="apps-filter-label">Status:</span>
+          <select className="input compact-input" value={status} onChange={(event) => setStatus(event.target.value)}>
+            {Object.values(ApplicationStatus).map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          {!loading && (
+            <span className="apps-count-badge" style={countBadgeStyle}>{countLabel}</span>
+          )}
+        </div>
       </section>
       {loading ? <div className="loading-state">Loading applications...</div> : error ? <div className="error-state">{error}</div> : (
         <>
-          <div className="stack">
+          <div className="app-list">
             {applications.map((app) => (
-              <article className="panel" key={app.id}>
-                <span className="pill">{app.status}</span>
-                <h3>{app.userName} wants {titleCase(app.requestedRole)}</h3>
-                <p>{app.message}</p>
-                {app.status === ApplicationStatus.PENDING ? <Button onClick={() => setSelected(app)}>Review</Button> : null}
-                {app.reviewNote ? <small className="muted">Note: {app.reviewNote}</small> : null}
+              <article
+                className={`app-row ${app.requestedRole === 'INFLUENCER' ? 'app-row--influencer' : 'app-row--seller'}`}
+                key={app.id}
+              >
+                <div
+                  className="app-avatar"
+                  style={{ background: app.requestedRole === 'INFLUENCER' ? 'var(--gold)' : 'var(--sienna)' }}
+                >
+                  {(app.userName || '?').charAt(0).toUpperCase()}
+                </div>
+                <div className="app-content">
+                  <strong className="app-name">{app.userName}</strong>
+                  <div className="app-contact">
+                    {app.userEmail && <span>{app.userEmail}</span>}
+                    {app.userPhone && <span>{app.userPhone}</span>}
+                    {app.createdAt && <span>Submitted {formatDate(app.createdAt)}</span>}
+                  </div>
+                  {app.message && <p className="app-message">{app.message}</p>}
+                  {app.socialUrl && (
+                    <p className="app-social"><a href={app.socialUrl} target="_blank" rel="noreferrer">{app.socialUrl}</a></p>
+                  )}
+                  {app.followerCount != null && (
+                    <span className="pill" style={{ fontSize: '0.72rem', width: 'max-content' }}>{app.followerCount.toLocaleString()} followers claimed</span>
+                  )}
+                  {app.reviewNote && <p className="app-review-note">Review note: {app.reviewNote}</p>}
+                </div>
+                <div className="app-side">
+                  <div className="app-badges">
+                    <span className={`pill app-role-pill ${app.requestedRole === 'INFLUENCER' ? 'role-influencer' : 'role-seller'}`}>
+                      {app.requestedRole}
+                    </span>
+                    <span className={`pill ${app.status === ApplicationStatus.PENDING ? 'badge-pending' : app.status === ApplicationStatus.APPROVED ? 'success' : 'danger'}`}>
+                      {app.status}
+                    </span>
+                  </div>
+                  {app.status === ApplicationStatus.PENDING && (
+                    <div className="app-actions">
+                      <Button
+                        variant="ghost"
+                        onClick={() => approve(app)}
+                        disabled={actionLoading === app.id}
+                        style={{ fontSize: '0.82rem', minHeight: 34, padding: '6px 14px', color: '#315b2b', borderColor: '#a3d1a0' }}
+                      >
+                        {actionLoading === app.id ? '...' : 'Approve'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => { setRejectTarget(app); setNote(''); }}
+                        disabled={actionLoading === app.id}
+                        style={{ fontSize: '0.82rem', minHeight: 34, padding: '6px 14px', color: '#9f2d20', borderColor: '#f5b8b2' }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </article>
             ))}
             {!applications.length ? <EmptyState title="No applications" /> : null}
           </div>
-          <Modal open={Boolean(selected)} title="Review application" onClose={() => setSelected(null)}>
-            <div style={{ display: 'grid', gap: 12, marginBottom: 20, padding: '16px', background: 'var(--cream)', borderRadius: 12, border: '1px solid var(--border)' }}>
-              <div>
-                <p className="eyebrow" style={{ marginBottom: 2 }}>Applicant</p>
-                <strong>{selected?.userName}</strong>
-                <p className="muted" style={{ margin: 0 }}>{selected?.userEmail}</p>
+          <Modal open={Boolean(rejectTarget)} title="Reject application" onClose={() => setRejectTarget(null)}>
+            <div className="form-card">
+              {rejectTarget && (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--espresso)' }}>
+                  Rejecting <strong>{rejectTarget.userName}</strong>'s {rejectTarget.requestedRole} application.
+                </p>
+              )}
+              <Input label="Rejection note (shown to applicant)" as="textarea" rows="3" value={note} onChange={(event) => setNote(event.target.value)} />
+              <div className="modal-actions">
+                <Button
+                  variant="ghost"
+                  onClick={rejectApplication}
+                  disabled={actionLoading === rejectTarget?.id}
+                  style={{ color: '#9f2d20', borderColor: '#f5b8b2' }}
+                >
+                  {actionLoading === rejectTarget?.id ? 'Processing...' : 'Confirm rejection'}
+                </Button>
+                <Button variant="ghost" onClick={() => setRejectTarget(null)}>Cancel</Button>
               </div>
-              {selected?.userPhone && (
-                <div>
-                  <p className="eyebrow" style={{ marginBottom: 2 }}>Phone</p>
-                  <span>{selected.userPhone}</span>
-                </div>
-              )}
-              {selected?.message && (
-                <div>
-                  <p className="eyebrow" style={{ marginBottom: 2 }}>Their message</p>
-                  <p style={{ margin: 0, lineHeight: 1.5 }}>{selected.message}</p>
-                </div>
-              )}
-              {selected?.socialUrl && (
-                <div>
-                  <p className="eyebrow" style={{ marginBottom: 2 }}>Social profile</p>
-                  <a href={selected.socialUrl} target="_blank" rel="noreferrer" style={{ wordBreak: 'break-all', color: 'var(--sienna)' }}>{selected.socialUrl}</a>
-                </div>
-              )}
-              {selected?.followerCount != null && (
-                <div>
-                  <p className="eyebrow" style={{ marginBottom: 2 }}>Claimed followers</p>
-                  <strong>{selected.followerCount.toLocaleString()}</strong>
-                </div>
-              )}
-            </div>
-            <Input label="Review note (shown to applicant on rejection)" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} />
-            <div className="hero-actions">
-              <Button onClick={() => review('approve')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Approve'}</Button>
-              <Button variant="ghost" onClick={() => review('reject')} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button>
             </div>
           </Modal>
         </>
@@ -805,7 +905,7 @@ export function AdminPayoutsPage() {
                 <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
                 <strong>{currency(request.amount)}</strong>
                 <small>to {request.upiId} · requested {formatDate(request.createdAt)}</small>
-                <div className="hero-actions">
+                <div className="modal-actions">
                   <Button onClick={() => approve(request.id)} disabled={actionLoading}>Approve</Button>
                   <Button variant="ghost" onClick={() => setSelected(request)} disabled={actionLoading}>Reject</Button>
                 </div>
@@ -821,7 +921,7 @@ export function AdminPayoutsPage() {
                 <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
                 <strong>{currency(request.amount)}</strong>
                 <small>to {request.upiId} · approved {formatDate(request.processedAt)}</small>
-                <div className="hero-actions">
+                <div className="modal-actions">
                   <Button onClick={() => markPaid(request.id)} disabled={actionLoading}>Mark as paid</Button>
                 </div>
               </article>
@@ -832,7 +932,7 @@ export function AdminPayoutsPage() {
       )}
       <Modal open={Boolean(selected)} title="Reject payout" onClose={() => setSelected(null)}>
         <Input label="Rejection note" as="textarea" rows="4" value={note} onChange={(event) => setNote(event.target.value)} />
-        <div className="hero-actions">
+        <div className="modal-actions">
           <Button variant="ghost" onClick={reject} disabled={actionLoading}>{actionLoading ? 'Processing...' : 'Reject'}</Button>
         </div>
       </Modal>
@@ -903,7 +1003,7 @@ export function InfluencerDashboardPage() {
             {referralCodes.map((code) => (
               <article className="panel" key={code.id} style={{ gap: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <code style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--sienna)' }}>{code.code}</code>
+                  <code className="referral-code">{code.code}</code>
                   <span className={`pill ${code.isActive ? 'success' : ''}`}>{code.isActive ? 'Active' : 'Inactive'}</span>
                 </div>
                 <small className="muted">Share this code with your audience to earn commissions on every order it generates.</small>
@@ -916,7 +1016,7 @@ export function InfluencerDashboardPage() {
         {profile && !editingProfile ? (
           <div className="form-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.25rem' }}>Creator profile</h2>
+              <h2>Creator profile</h2>
               <Button variant="ghost" type="button" onClick={() => setEditingProfile(true)}>Edit</Button>
             </div>
             {profile.niche ? (
@@ -935,7 +1035,7 @@ export function InfluencerDashboardPage() {
         ) : (
           <form className="form-card" onSubmit={profileForm.handleSubmit(saveProfile)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1.25rem' }}>Creator profile</h2>
+              <h2>Creator profile</h2>
               {profile ? <Button variant="ghost" type="button" onClick={() => setEditingProfile(false)}>Cancel</Button> : null}
             </div>
             <Input label="Niche (e.g. baking, food, lifestyle)" error={profileForm.formState.errors.niche?.message} {...profileForm.register('niche')} />
@@ -953,6 +1053,8 @@ export function InfluencerDashboardPage() {
 export function SellerCollaborationsPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const highlight = searchParams.get('highlight');
 
   useEffect(() => {
     collaborationsApi.outgoing()
@@ -962,13 +1064,23 @@ export function SellerCollaborationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!highlight || loading) return;
+    const el = document.querySelector(`[data-id="${highlight}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('notif-highlight');
+    const timer = setTimeout(() => el.classList.remove('notif-highlight'), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight, loading]);
+
   return (
     <div className="page">
       <section className="section-head"><div><p className="eyebrow">Seller Studio</p><h1>Collaboration requests</h1></div></section>
       {loading ? <div className="loading-state">Loading…</div> : (
         <div className="stack">
           {requests.map((request) => (
-            <article className="panel" key={request.id}>
+            <article className="panel" key={request.id} data-id={request.id}>
               <span className="pill">{titleCase(request.status)}</span>
               <h3>{request.influencerName || `Influencer #${request.influencerId}`}</h3>
               {request.message ? <p>{request.message}</p> : null}
@@ -986,6 +1098,8 @@ export function InfluencerCollaborationsPage() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [searchParams] = useSearchParams();
+  const highlight = searchParams.get('highlight');
 
   function load() {
     setLoading(true);
@@ -996,6 +1110,16 @@ export function InfluencerCollaborationsPage() {
       .finally(() => setLoading(false));
   }
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!highlight || loading) return;
+    const el = document.querySelector(`[data-id="${highlight}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('notif-highlight');
+    const timer = setTimeout(() => el.classList.remove('notif-highlight'), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight, loading]);
 
   async function respond(sellerId, status) {
     setActionLoading(sellerId);
@@ -1016,13 +1140,13 @@ export function InfluencerCollaborationsPage() {
       {loading ? <div className="loading-state">Loading…</div> : (
         <div className="stack">
           {requests.map((request) => (
-            <article className="panel" key={request.id}>
+            <article className="panel" key={request.id} data-id={request.id}>
               <span className="pill">{titleCase(request.status)}</span>
               <h3>{request.sellerName || `Seller #${request.sellerId}`}</h3>
               {request.message ? <p>{request.message}</p> : null}
               <small>Received {formatDate(request.createdAt)}</small>
               {request.status === CollaborationStatus.PENDING ? (
-                <div className="hero-actions">
+                <div className="modal-actions">
                   <Button onClick={() => respond(request.sellerId, CollaborationStatus.APPROVED)} disabled={actionLoading === request.sellerId}>Approve</Button>
                   <Button variant="ghost" onClick={() => respond(request.sellerId, CollaborationStatus.REJECTED)} disabled={actionLoading === request.sellerId}>Reject</Button>
                 </div>
@@ -1042,6 +1166,8 @@ export function InfluencerWalletPage() {
   const [history, setHistory] = useState([]);
   const [referralCodes, setReferralCodes] = useState([]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(payoutSchema) });
+  const [searchParams] = useSearchParams();
+  const highlight = searchParams.get('highlight');
 
   function load() {
     walletApi.balance().then(setBalance).catch(() => setBalance(null));
@@ -1050,6 +1176,16 @@ export function InfluencerWalletPage() {
     influencersApi.referralCodes().then(setReferralCodes).catch(() => setReferralCodes([]));
   }
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!highlight || !history.length) return;
+    const el = document.querySelector(`[data-id="${highlight}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('notif-highlight');
+    const timer = setTimeout(() => el.classList.remove('notif-highlight'), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight, history]);
 
   const hasPending = history.some((request) => request.status === PayoutStatus.PENDING);
 
@@ -1065,61 +1201,68 @@ export function InfluencerWalletPage() {
   }
 
   return (
-    <div className="page two-column">
-      <section>
-        <h1>Wallet</h1>
-        <div className="stats-grid">
-          <article className="stat-card"><strong>{currency(balance ?? 0)}</strong><small>Available balance</small></article>
+    <div className="page">
+      <div className="section-head">
+        <div>
+          <p className="eyebrow">Creator Hub</p>
+          <h1>Wallet</h1>
         </div>
-        <h2>Transaction history</h2>
-        <div className="stack">
-          {transactions.map((transaction) => (
-            <article className="order-item" key={transaction.id}>
-              <strong>{transaction.type === 'CREDIT' ? '+' : '-'}{currency(transaction.amount)}</strong>
-              <span>{transaction.description}</span>
-              <small>{formatDate(transaction.createdAt)}</small>
-            </article>
-          ))}
-          {!transactions.length ? <EmptyState title="No wallet activity yet" /> : null}
-        </div>
-        <h2>Payout history</h2>
-        <div className="stack">
-          {history.map((request) => (
-            <article className="panel" key={request.id}>
-              <span className="pill">{titleCase(request.status)}</span>
-              <strong>{currency(request.amount)}</strong>
-              <small>to {request.upiId} · requested {formatDate(request.createdAt)}</small>
-              {request.adminNote ? <p>{request.adminNote}</p> : null}
-            </article>
-          ))}
-          {!history.length ? <EmptyState title="No payout requests yet" /> : null}
-        </div>
-      </section>
-      <aside className="summary-panel">
-        <h2>Your referral code</h2>
-        {referralCodes.length > 0 ? (
+      </div>
+      <div className="two-column">
+        <section>
+          <div className="stats-grid" style={{ marginBottom: 32 }}>
+            <article className="stat-card"><strong>{currency(balance ?? 0)}</strong><small>Available balance</small></article>
+          </div>
+          <h2 style={{ fontSize: '1.25rem', marginBottom: 12 }}>Transaction history</h2>
           <div className="stack">
-            {referralCodes.map((rc) => (
-              <article className="panel" key={rc.id}>
-                <code className="referral-code">{rc.code}</code>
-                <small>Share this code with customers. You earn commission when they place an order.</small>
+            {transactions.map((transaction) => (
+              <article className="order-item" key={transaction.id}>
+                <strong>{transaction.type === 'CREDIT' ? '+' : '-'}{currency(transaction.amount)}</strong>
+                <span>{transaction.description}</span>
+                <small>{formatDate(transaction.createdAt)}</small>
               </article>
             ))}
+            {!transactions.length ? <EmptyState title="No wallet activity yet" /> : null}
           </div>
-        ) : (
-          <p className="muted">No active referral code found. Contact support if this is unexpected.</p>
-        )}
-        <h2>Request a payout</h2>
-        {hasPending ? (
-          <p className="muted">You already have a pending payout request — wait for it to be processed before requesting another.</p>
-        ) : (
-          <form className="form-card" onSubmit={handleSubmit(submitPayout)}>
-            <Input label="Amount (₹)" type="number" step="1" error={errors.amount?.message} {...register('amount')} />
-            <Input label="UPI ID" placeholder="yourname@upi" error={errors.upiId?.message} {...register('upiId')} />
-            <Button>Request payout</Button>
-          </form>
-        )}
-      </aside>
+          <h2 style={{ fontSize: '1.25rem', marginTop: 32, marginBottom: 12 }}>Payout history</h2>
+          <div className="stack">
+            {history.map((request) => (
+              <article className="panel" key={request.id} data-id={request.id}>
+                <span className="pill">{titleCase(request.status)}</span>
+                <strong>{currency(request.amount)}</strong>
+                <small>to {request.upiId} · requested {formatDate(request.createdAt)}</small>
+                {request.adminNote ? <p>{request.adminNote}</p> : null}
+              </article>
+            ))}
+            {!history.length ? <EmptyState title="No payout requests yet" /> : null}
+          </div>
+        </section>
+        <aside className="summary-panel">
+          <h2>Your referral code</h2>
+          {referralCodes.length > 0 ? (
+            <div className="stack">
+              {referralCodes.map((rc) => (
+                <article className="panel" key={rc.id}>
+                  <code className="referral-code">{rc.code}</code>
+                  <small>Share this code with customers. You earn commission when they place an order.</small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No active referral code found. Contact support if this is unexpected.</p>
+          )}
+          <h2>Request a payout</h2>
+          {hasPending ? (
+            <p className="muted">You already have a pending payout request — wait for it to be processed before requesting another.</p>
+          ) : (
+            <form className="form-card" onSubmit={handleSubmit(submitPayout)}>
+              <Input label="Amount (₹)" type="number" step="1" error={errors.amount?.message} {...register('amount')} />
+              <Input label="UPI ID" placeholder="yourname@upi" error={errors.upiId?.message} {...register('upiId')} />
+              <Button>Request payout</Button>
+            </form>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
@@ -1201,7 +1344,7 @@ export function AdminCategoriesPage() {
       <Modal open={Boolean(deleteTarget)} title="Delete category" onClose={() => setDeleteTarget(null)}>
         <div className="form-card">
           <p>Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.</p>
-          <div className="hero-actions">
+          <div className="modal-actions">
             <Button onClick={confirmDelete}>Delete</Button>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           </div>
@@ -1214,7 +1357,7 @@ export function AdminCategoriesPage() {
 function ProductForm({ form, categories, onSubmit, editing, onCancel }) {
   return (
     <form className="form-card compact" onSubmit={form.handleSubmit(onSubmit)}>
-      <h2 style={{ fontSize: '1.1rem', marginBottom: 0 }}>{editing ? 'Edit product' : 'Add product'}</h2>
+      <h2>{editing ? 'Edit product' : 'Add product'}</h2>
       <Input label="Name" error={form.formState.errors.name?.message} {...form.register('name')} />
       <Input label="Description" as="textarea" rows="2" error={form.formState.errors.description?.message} {...form.register('description')} />
       <div className="form-row">

@@ -1,19 +1,20 @@
 package com.bakeaura.notification;
 
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.event.EventListener;
+import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
@@ -45,29 +46,25 @@ public class NotificationService {
         notificationRepository.markAllAsRead(getUser(userId));
     }
 
-    @EventListener
-    @Transactional
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        com.bakeaura.order.Order order = event.getOrder();
-        notifyUser(
-                order.getSeller().getId(),
-                "ORDER_CREATED",
-                "New order #" + order.getId() + " has been placed.",
-                order.getId()
-        );
-    }
-
+    // @Async: runs in background thread pool so notification DB write + WebSocket push
+    // never block the payment response being returned to the client.
+    @Async
     @Transactional
     public NotificationDto notifyUser(Long userId, String type, String message, Long relatedId) {
-        User user = getUser(userId);
-        Notification notification = new Notification();
-        notification.setUser(user);
-        notification.setType(type);
-        notification.setMessage(message);
-        notification.setRelatedId(relatedId);
-        NotificationDto dto = toDto(notificationRepository.save(notification));
-        messagingTemplate.convertAndSend("/topic/users/" + user.getId() + "/notifications", dto);
-        return dto;
+        try {
+            User user = getUser(userId);
+            Notification notification = new Notification();
+            notification.setUser(user);
+            notification.setType(type);
+            notification.setMessage(message);
+            notification.setRelatedId(relatedId);
+            NotificationDto dto = toDto(notificationRepository.save(notification));
+            messagingTemplate.convertAndSend("/topic/users/" + user.getId() + "/notifications", dto);
+            return dto;
+        } catch (Exception e) {
+            log.error("Failed to deliver notification to user {}: {}", userId, e.getMessage());
+            return null;
+        }
     }
 
     private Notification getOwnedNotification(Long id, User user) {

@@ -23,7 +23,8 @@ const statuses = Object.values(OrderStatus);
 const reviewSchema = z.object({ rating: z.coerce.number().min(1).max(5), comment: z.string().min(3) });
 
 const VALID_NEXT = {
-  [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  // PENDING → CONFIRMED intentionally absent: only PaymentService sets CONFIRMED after payment capture
+  [OrderStatus.PENDING]: [OrderStatus.CANCELLED],
   [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
   [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
   [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
@@ -36,7 +37,8 @@ export function MyOrdersPage() {
   const [filter, setFilter] = useState('');
 
   async function load() {
-    setOrders(await ordersApi.myOrders().catch(() => []));
+    const page = await ordersApi.myOrders().catch(() => null);
+    setOrders(page?.content || []);
   }
   useEffect(() => { load(); }, []);
 
@@ -74,7 +76,7 @@ export function OrderDetailPage() {
     paymentsApi.byOrder(id).then(setPayment).catch(() => setPayment(null));
     const client = createSocketClient();
     client.onConnect = () => {
-      client.subscribe(`/topic/orders/${id}`, (message) => {
+      client.subscribe(`/topic/order/${id}`, (message) => {
         const payload = JSON.parse(message.body);
         setOrder((current) => current ? { ...current, status: payload.status } : current);
         toast(payload.message || 'Order updated');
@@ -169,7 +171,7 @@ export function OrderDetailPage() {
                 <Button variant="ghost" onClick={removeReview}>Remove review</Button>
               </>
             ) : (
-              <form className="form-card slim" onSubmit={handleSubmit(submitReview)}>
+              <form style={{ display: 'grid', gap: 14 }} onSubmit={handleSubmit(submitReview)}>
                 <Input label="Rating (1-5)" type="number" min="1" max="5" error={errors.rating?.message} {...register('rating')} />
                 <Input label="Comment" as="textarea" rows="3" error={errors.comment?.message} {...register('comment')} />
                 <Button>Submit review</Button>

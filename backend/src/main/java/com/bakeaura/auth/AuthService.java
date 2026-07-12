@@ -153,16 +153,25 @@ public class AuthService {
     }
 
     @Transactional
-    public void verifyEmail(String token ){
-        User user = userRepository.findByEmailVerificationToken(token).orElseThrow(() -> new BadRequestException("Invalid verification token "));
+    public void verifyEmail(String token) {
+        User user = userRepository.findByEmailVerificationToken(token)
+                .orElseThrow(() -> new BadRequestException("This verification link is invalid or has already been used."));
 
-        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())){
-            throw new BadRequestException("Verification token expired");
+        if (user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("This verification link has expired. Please request a new one.");
+        }
+
+        // Idempotent: concurrent calls (email client prefetch, React Strict Mode dev double-call)
+        // both succeed because the token is kept in DB until it naturally expires.
+        if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
+            return;
         }
 
         user.setIsEmailVerified(true);
-        user.setEmailVerificationToken(null);
-        user.setEmailVerificationTokenExpiry(null);
+        // Intentionally NOT clearing the token — keeping it lets concurrent duplicate requests
+        // (double-click, email client prefetch) find the user and see they're already verified.
+        // The token expires naturally at emailVerificationTokenExpiry (24h from issue).
+        // It is overwritten if the user requests a new verification link via resend.
         userRepository.save(user);
     }
 

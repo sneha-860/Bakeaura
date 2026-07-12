@@ -2,7 +2,7 @@ import { Bell, Camera, Heart, MapPin, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { addressesApi } from '../api/addresses';
@@ -138,18 +138,24 @@ export function ProfilePage() {
           </div>
           <label className="field">
             <span>Bio (optional)</span>
-            <textarea className="input" rows={3} maxLength={500} placeholder="Tell people a little about yourself..." {...profileForm.register('bio')} />
+            <textarea className="input profile-bio-input" rows={2} maxLength={500} placeholder="Tell people a little about yourself..." {...profileForm.register('bio')} />
             {profileForm.formState.errors.bio ? <small className="field-error">{profileForm.formState.errors.bio.message}</small> : null}
           </label>
-          <button type="button" className="btn btn-ghost" onClick={detectLocation} style={{ justifySelf: 'start' }}>
-            <MapPin size={16} /> Use my current location
-          </button>
+          <div className="location-field">
+            <button type="button" className="btn btn-ghost" onClick={detectLocation}>
+              <MapPin size={16} /> Use my current location
+            </button>
+            <p className="location-hint">Used to show your shop and orders to nearby customers</p>
+          </div>
           <div className="form-row">
             <Input label="Latitude" type="number" step="any" error={profileForm.formState.errors.latitude?.message} {...profileForm.register('latitude')} />
             <Input label="Longitude" type="number" step="any" error={profileForm.formState.errors.longitude?.message} {...profileForm.register('longitude')} />
           </div>
           <Button>Save profile</Button>
         </form>
+        <div className="profile-section-break">
+          <span>Security</span>
+        </div>
         <div className="security-grid">
           <form className="form-card compact" onSubmit={passwordForm.handleSubmit(updatePassword)}>
             <h2>Change password</h2>
@@ -165,33 +171,48 @@ export function ProfilePage() {
           </form>
         </div>
       </section>
-      <aside className="summary-panel">
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
-          {user?.profileImageUrl
-            ? <img src={user.profileImageUrl} alt="Profile" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', margin: '0 auto', display: 'block' }} />
-            : <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'var(--cream-dark, #e8ddd0)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}><UserRound size={32} /></div>
-          }
-          <label style={{ display: 'inline-block', marginTop: 10, cursor: 'pointer' }}>
-            <span className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}>
-              <Camera size={14} /> {avatarFile ? avatarFile.name : 'Change photo'}
-            </span>
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
-          </label>
-          {avatarFile ? <Button loading={avatarUploading} onClick={uploadAvatar} type="button" style={{ marginTop: 8, width: '100%' }}>Upload</Button> : null}
+      <aside className="summary-panel profile-sidebar">
+        <div className="profile-avatar-block">
+          <div className="profile-avatar-wrap">
+            {user?.profileImageUrl
+              ? <img src={user.profileImageUrl} alt="Profile" className="profile-avatar-img" />
+              : <div className="profile-avatar-placeholder"><UserRound size={34} /></div>
+            }
+            <label className="profile-avatar-edit" title="Change photo">
+              <Camera size={12} />
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+          {avatarFile ? (
+            <div className="profile-avatar-pending">
+              <span className="profile-avatar-filename">{avatarFile.name}</span>
+              <Button loading={avatarUploading} onClick={uploadAvatar} type="button" style={{ minHeight: 34, padding: '6px 14px', fontSize: '0.82rem' }}>Upload photo</Button>
+            </div>
+          ) : null}
         </div>
-        <h2>{user?.name || 'Account'}</h2>
-        <p>{user?.email}</p>
-        {user?.bio ? <p className="muted" style={{ fontSize: '0.9rem' }}>{user.bio}</p> : null}
-        <span className="pill">{user?.role}</span>
+        <div className="profile-identity">
+          <h2 className="profile-identity-name">{user?.name || 'Account'}</h2>
+          <p className="profile-identity-email">{user?.email}</p>
+          <div className="profile-identity-row">
+            <span className="pill">{titleCase(user?.role ?? '')}</span>
+            {user?.createdAt ? <span className="profile-since">Member since {new Date(user.createdAt).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</span> : null}
+          </div>
+        </div>
+        {user?.bio ? <p className="profile-sidebar-bio">{user.bio}</p> : null}
+        {user?.role === Role.SELLER ? (
+          <Link to={`/sellers/${user.id}`} className="btn btn-ghost profile-storefront-btn">
+            View my storefront
+          </Link>
+        ) : null}
         {user?.role !== Role.SELLER && user?.role !== Role.ADMIN && !hasPendingApplication && (
           user?.isEmailVerified
-            ? <button className="btn btn-primary" onClick={() => setApplyModalOpen(true)}>Apply for a role</button>
-            : <Link className="btn btn-ghost" to="/verify-email" style={{ fontSize: '0.85rem' }}>Verify email to apply for a role</Link>
+            ? <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setApplyModalOpen(true)}>Apply for a role</button>
+            : <Link className="btn btn-ghost" to="/verify-email" style={{ fontSize: '0.85rem', width: '100%', justifyContent: 'center' }}>Verify email to apply for a role</Link>
         )}
         {hasPendingApplication && (
-          <div className="note" style={{ padding: '12px', background: '#fff3cd', borderRadius: '8px', fontSize: '0.9rem' }}>
-            <strong>Application pending</strong>
-            <p style={{ margin: '4px 0 0' }}>Your role application is being reviewed.</p>
+          <div className="setup-banner" style={{ marginBottom: 0 }}>
+            <p className="setup-banner-title">Application pending</p>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--mocha)' }}>Your role application is being reviewed.</p>
           </div>
         )}
       </aside>
@@ -330,6 +351,7 @@ export function FavouritesPage() {
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
 
   const load = () => {
     setLoading(true);
@@ -353,25 +375,56 @@ export function NotificationsPage() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }
 
-  const hasUnread = notifications.some((n) => !n.read);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const FILTERS = [
+    { key: 'all',    label: 'All' },
+    { key: 'unread', label: unreadCount > 0 ? `Unread (${unreadCount})` : 'Unread' },
+    { key: 'orders', label: 'Orders' },
+    { key: 'cakes',  label: 'Custom Cakes' },
+  ];
+
+  const filtered = notifications.filter((n) => {
+    if (filter === 'unread') return !n.read;
+    if (filter === 'orders') return n.type?.startsWith('ORDER') || n.type?.startsWith('PAYMENT');
+    if (filter === 'cakes')  return n.type?.startsWith('CUSTOM_ORDER');
+    return true;
+  });
 
   return (
     <div className="page">
-      <section className="section-head">
+      <div className="notif-page-head">
         <div>
           <p className="eyebrow"><Bell size={16} /> Updates</p>
           <h1>Notifications</h1>
         </div>
-        {hasUnread && <Button variant="ghost" onClick={markAll}>Mark all read</Button>}
-      </section>
-      <div className="stack">
+        {unreadCount > 0 && (
+          <button className="notif-mark-all-btn" onClick={markAll}>
+            Mark all as read
+          </button>
+        )}
+      </div>
+      <div className="notif-filter-tabs">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            className={`filter-chip${filter === f.key ? ' active' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      <div className="notif-list">
         {loading
-          ? [1, 2, 3].map((i) => <div key={i} className="skeleton-card" style={{ height: 72 }} />)
-          : notifications.map((item) => (
+          ? [1, 2, 3].map((i) => <div key={i} className="skeleton-card" style={{ height: 68 }} />)
+          : filtered.map((item) => (
               <NotificationItem key={item.id} notification={item} onRead={markRead} />
             ))
         }
-        {!loading && !notifications.length ? <EmptyState title="No notifications yet" /> : null}
+        {!loading && !filtered.length ? (
+          <EmptyState title={filter === 'unread' ? "You're all caught up" : 'No notifications here'} />
+        ) : null}
       </div>
     </div>
   );
@@ -419,13 +472,27 @@ export function RoleApplicationPage() {
 
 export function CustomOrdersPage() {
   const [requests, setRequests] = useState([]);
+  const [searchParams] = useSearchParams();
+  const highlight = searchParams.get('highlight');
+
   useEffect(() => { customOrdersApi.myRequests().then(setRequests).catch(() => setRequests([])); }, []);
+
+  useEffect(() => {
+    if (!highlight || !requests.length) return;
+    const el = document.querySelector(`[data-id="${highlight}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('notif-highlight');
+    const timer = setTimeout(() => el.classList.remove('notif-highlight'), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight, requests]);
+
   return (
     <div className="page">
       <section className="page-hero compact-hero"><p className="eyebrow">Custom cakes</p><h1>Your custom order requests</h1></section>
       <div className="stack">
         {requests.map((request) => (
-          <article className="panel" key={request.id}>
+          <article className="panel" key={request.id} data-id={request.id}>
             <span className="pill">{titleCase(request.status)}</span>
             <h3>{request.occasion} · serves {request.serves}</h3>
             <p>{request.designBrief}</p>

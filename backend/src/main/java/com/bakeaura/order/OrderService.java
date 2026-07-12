@@ -4,9 +4,11 @@ import com.bakeaura.map.MapService;
 import com.bakeaura.cart.CartDto;
 import com.bakeaura.cart.CartItemDto;
 import com.bakeaura.cart.CartService;
+import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.notification.EmailService;
 import com.bakeaura.notification.SmsService;
 import com.bakeaura.notification.NotificationService;
+import com.bakeaura.payment.PaymentRepository;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
@@ -18,6 +20,7 @@ import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,7 +30,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,6 +37,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
 
     private final OrderRepository orderRepository;
@@ -47,6 +50,7 @@ public class OrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final EmailService emailService;
     private final SmsService smsService;
+    private final PaymentRepository paymentRepository;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, Long customerId) {
@@ -84,8 +88,10 @@ public class OrderService {
                 .deliveryAddress(request.getDeliveryAddress())
                 .deliveryLatitude(request.getDeliveryLatitude())
                 .deliveryLongitude(request.getDeliveryLongitude())
+                .deliveryInstructions(request.getDeliveryInstructions())
                 .orderType(request.getOrderType())
                 .scheduledDeliveryDate(request.getScheduledDeliveryDate())
+                .referralCode(request.getReferralCode())
                 .build();
 
         BigDecimal total = BigDecimal.ZERO;
@@ -111,6 +117,9 @@ public class OrderService {
         order.setTotalAmount(total);
         Order saved = orderRepository.save(order);
 
+        // Publishes to: PaymentService (creates Razorpay order + payment record)
+        //               OrderTrackingService (broadcasts PENDING status to order WebSocket)
+        // Seller notification fires only after payment is captured via confirmOrderAfterPayment.
         eventPublisher.publishEvent(
                 new OrderCreatedEvent(this, saved, customer.getEmail(), request.getReferralCode())
         );
@@ -134,12 +143,70 @@ public class OrderService {
         orderRequest.setOrderType(request.getOrderType());
         orderRequest.setScheduledDeliveryDate(request.getScheduledDeliveryDate());
         orderRequest.setReferralCode(request.getReferralCode());
+        orderRequest.setDeliveryInstructions(request.getDeliveryInstructions());
         orderRequest.setItems(cart.getItems().stream()
                 .filter(item -> request.getSellerId().equals(item.getSellerId()))
                 .map(this::toOrderItemRequest)
                 .toList());
 
         return createOrder(orderRequest, customerId);
+    }
+
+    /**
+     * Called by PaymentService after a payment is successfully captured (both client-side verify
+     * and webhook path). Sets order to CONFIRMED, calculates ETA, sends confirmation email/SMS,
+     * notifies both seller and customer, and broadcasts the status update via WebSocket.
+     *
+     * Must NOT be called for cancelled orders — PaymentService checks order.status before calling.
+     */
+    @Transactional
+    public void confirmOrderAfterPayment(Order order) {
+        try {
+            validateLocation(order.getSeller().getLatitude(), order.getSeller().getLongitude(),
+                    "Seller location not configured");
+            validateLocation(order.getDeliveryLatitude(), order.getDeliveryLongitude(),
+                    "Delivery location not configured");
+            Integer eta = mapService.getEstimatedDeliveryMinutes(
+                    order.getSeller().getLatitude(), order.getSeller().getLongitude(),
+                    order.getDeliveryLatitude(), order.getDeliveryLongitude()
+            );
+            order.setEstimatedDeliveryMinutes(eta);
+        } catch (Exception e) {
+            log.warn("Could not calculate ETA for order {}: {}", order.getId(), e.getMessage());
+        }
+
+        order.setStatus(OrderStatus.CONFIRMED);
+        orderRepository.save(order);
+
+        orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
+
+        // Notify seller — this is the first time seller sees the order (payment is confirmed)
+        notificationService.notifyUser(
+                order.getSeller().getId(),
+                "NEW_ORDER",
+                "New paid order #" + order.getId() + " from " + order.getCustomer().getName()
+                        + " · ₹" + order.getTotalAmount(),
+                order.getId()
+        );
+
+        // Notify customer
+        notificationService.notifyUser(
+                order.getCustomer().getId(),
+                "PAYMENT_CONFIRMED",
+                "Payment confirmed for order #" + order.getId() + ". Your baker has received your order!",
+                order.getId()
+        );
+
+        // Email and SMS are @Async — return immediately, fire in background
+        emailService.sendOrderConfirmationEmail(
+                order.getCustomer().getEmail(),
+                String.valueOf(order.getId()),
+                order.getSeller().getName()
+        );
+        smsService.sendOrderConfirmedSms(
+                order.getCustomer().getPhone(),
+                String.valueOf(order.getId())
+        );
     }
 
     @Transactional
@@ -161,30 +228,6 @@ public class OrderService {
         validateTransition(order.getStatus(), newStatus);
         order.setStatus(newStatus);
 
-        if (newStatus == OrderStatus.CONFIRMED) {
-            validateLocation(order.getSeller().getLatitude(),
-                    order.getSeller().getLongitude(), "Seller location is not configured");
-            validateLocation(order.getDeliveryLatitude(),
-                    order.getDeliveryLongitude(), "Delivery location is not configured");
-
-            Integer eta = mapService.getEstimatedDeliveryMinutes(
-                    order.getSeller().getLatitude(), order.getSeller().getLongitude(),
-                    order.getDeliveryLatitude(), order.getDeliveryLongitude()
-            );
-            order.setEstimatedDeliveryMinutes(eta);
-
-            emailService.sendOrderConfirmationEmail(
-                    order.getCustomer().getEmail(),
-                    String.valueOf(order.getId()),
-                    order.getSeller().getName()
-            );
-
-            smsService.sendOrderConfirmedSms(
-                    order.getCustomer().getPhone(),
-                    String.valueOf(order.getId())
-            );
-        }
-
         if (newStatus == OrderStatus.DELIVERED) {
             emailService.sendOrderDeliveredEmail(
                     order.getCustomer().getEmail(),
@@ -205,7 +248,7 @@ public class OrderService {
         notificationService.notifyUser(
                 order.getCustomer().getId(),
                 "ORDER_STATUS",
-                "Order #" + orderId + " status changed to " + newStatus,
+                "Order #" + orderId + " is now " + newStatus.toString().toLowerCase().replace("_", " "),
                 orderId
         );
 
@@ -295,7 +338,9 @@ public class OrderService {
 
     private void validateTransition(OrderStatus current, OrderStatus next) {
         boolean valid = switch (current) {
-            case PENDING -> next == OrderStatus.CONFIRMED || next == OrderStatus.CANCELLED;
+            // PENDING → CONFIRMED is intentionally removed: only PaymentService sets CONFIRMED.
+            // Sellers receive orders only after payment capture, so their first action is PREPARING.
+            case PENDING -> next == OrderStatus.CANCELLED;
             case CONFIRMED -> next == OrderStatus.PREPARING || next == OrderStatus.CANCELLED;
             case PREPARING -> next == OrderStatus.OUT_FOR_DELIVERY || next == OrderStatus.CANCELLED;
             case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED;
@@ -353,14 +398,20 @@ public class OrderService {
                         .build())
                 .collect(Collectors.toList());
 
+        PaymentStatus paymentStatus = paymentRepository.findByOrder_Id(order.getId())
+                .map(p -> p.getStatus())
+                .orElse(null);
+
         return OrderResponseDto.builder()
                 .id(order.getId())
                 .sellerId(order.getSeller().getId())
                 .customerName(order.getCustomer().getName())
                 .sellerName(order.getSeller().getName())
                 .status(order.getStatus())
+                .paymentStatus(paymentStatus)
                 .totalAmount(order.getTotalAmount())
                 .deliveryAddress(order.getDeliveryAddress())
+                .deliveryInstructions(order.getDeliveryInstructions())
                 .estimatedDeliveryMinutes(order.getEstimatedDeliveryMinutes())
                 .razorpayOrderId(order.getRazorpayOrderId())
                 .items(itemResponses)

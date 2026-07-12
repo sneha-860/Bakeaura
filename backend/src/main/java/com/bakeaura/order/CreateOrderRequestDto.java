@@ -41,6 +41,8 @@ public class CreateOrderRequestDto {
 
     private String referralCode;
 
+    private String deliveryInstructions;
+
     @Data
     public static class OrderItemRequest {
         @NotNull

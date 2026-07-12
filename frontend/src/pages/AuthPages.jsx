@@ -67,25 +67,40 @@ export function LoginPage() {
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, role, setAuth } = useAuthStore();
+  const { isAuthenticated, emailVerified, role, setAuth } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState(null);
+  const [resendStatus, setResendStatus] = useState('idle');
   const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(registerSchema) });
 
-  if (isAuthenticated) return <Navigate to={dashboardForRole(role)} replace />;
+  // Only redirect if authenticated AND verified — not right after registration where
+  // emailVerified is false and we need to show the "Check your inbox" screen.
+  if (isAuthenticated && emailVerified) return <Navigate to={dashboardForRole(role)} replace />;
 
   async function submit(values) {
     setLoading(true);
     try {
       const data = await authApi.register({ name: values.name, email: values.email, password: values.password });
-      setAuth(data);
       setRegisteredEmail(values.email);
+      setAuth(data);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    if (!registeredEmail || resendStatus === 'loading' || resendStatus === 'sent') return;
+    setResendStatus('loading');
+    try {
+      await authApi.resendVerification(registeredEmail);
+      setResendStatus('sent');
+    } catch {
+      setResendStatus('idle');
+      toast.error('Could not resend. Please try again.');
     }
   }
 
@@ -96,6 +111,13 @@ export function RegisterPage() {
           <CheckCircle2 size={40} color="var(--sienna)" />
           <p>We sent a verification link to <strong>{registeredEmail}</strong>. Click it to activate your account.</p>
           <p className="muted" style={{ fontSize: '0.88rem' }}>Can't find it? Check your spam folder. The link expires in 24 hours.</p>
+          {resendStatus === 'sent' ? (
+            <p className="muted" style={{ fontSize: '0.88rem', color: 'var(--sage)' }}>New link sent — check your inbox and spam folder.</p>
+          ) : (
+            <Button variant="ghost" loading={resendStatus === 'loading'} onClick={handleResend} style={{ fontSize: '0.88rem' }}>
+              Resend verification email
+            </Button>
+          )}
           <Button onClick={() => navigate('/')}>Continue to Bakeaura</Button>
         </div>
       </AuthShell>
@@ -130,13 +152,32 @@ export function RegisterPage() {
   );
 }
 
-function VerificationLanding({ title, subtitle, verifyFn, successMessage, successTo, successLabel, onSuccess, showResend }) {
+function VerifyShell({ children }) {
+  return (
+    <div className="verify-shell">
+      <div className="verify-card">
+        <Link to="/" className="verify-brand">
+          <span className="brand-mark">B</span>
+          <span>Bakeaura</span>
+        </Link>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function VerificationLanding({ successMessage, successTo, successLabel, onSuccess, showResend }) {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState('verifying');
   const [message, setMessage] = useState('');
   const [resendEmail, setResendEmail] = useState('');
   const [resendStatus, setResendStatus] = useState('idle');
   const [resendMessage, setResendMessage] = useState('');
+
+  const errorMessages = {
+    expired: 'This verification link has expired. Use the form below to request a new one.',
+    invalid: 'This link is invalid or has already been used. Request a new one below.',
+  };
 
   async function handleResend(e) {
     e.preventDefault();
@@ -146,72 +187,89 @@ function VerificationLanding({ title, subtitle, verifyFn, successMessage, succes
     try {
       await authApi.resendVerification(resendEmail);
       setResendStatus('sent');
-      setResendMessage('If this email exists and is unverified, a new link has been sent.');
+      setResendMessage('If this email exists and is unverified, a new link has been sent. Check your inbox and spam folder.');
     } catch {
       setResendStatus('failed');
       setResendMessage('Something went wrong. Please try again.');
     }
   }
 
+  // The backend verifies the token and redirects here with ?verified=true or ?error=<code>.
+  // No API call needed — just read the redirect params.
   useEffect(() => {
-    const token = searchParams.get('token');
-    if (!token) {
+    const verified = searchParams.get('verified');
+    const error = searchParams.get('error');
+
+    if (verified === 'true') {
+      onSuccess?.();
+      setStatus('success');
+    } else if (error) {
       setStatus('error');
-      setMessage('This link is missing its verification token.');
-      return;
+      setMessage(errorMessages[error] || 'Something went wrong. Request a new link below.');
+    } else {
+      setStatus('error');
+      setMessage('No verification link detected. Request a new one below.');
     }
-    verifyFn(token)
-      .then(() => {
-        onSuccess?.();
-        setStatus('success');
-      })
-      .catch((error) => {
-        setStatus('error');
-        setMessage(error?.response?.data?.message || 'This link is invalid or has expired.');
-      });
-  }, [searchParams, verifyFn]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <AuthShell title={title} subtitle={subtitle}>
-      <div className="form-card center">
-        {status === 'verifying' ? <p>Verifying…</p> : null}
-        {status === 'success' ? (
-          <>
-            <CheckCircle2 size={40} />
-            <p>{successMessage}</p>
-            <Link className="btn btn-primary" to={successTo}>{successLabel}</Link>
-          </>
-        ) : null}
-        {status === 'error' ? (
-          <>
-            <XCircle size={40} />
-            <p className="field-error">{message}</p>
-            {showResend && resendStatus !== 'sent' ? (
-              <form onSubmit={handleResend} style={{ width: '100%', marginTop: '1rem' }}>
-                <p className="muted" style={{ marginBottom: '0.5rem' }}>Need a new link?</p>
-                <Input
-                  label="Your email address"
-                  type="email"
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  required
-                />
-                <Button loading={resendStatus === 'loading'} style={{ marginTop: '0.5rem' }}>
-                  Resend verification email
-                </Button>
-                {resendStatus === 'failed' ? (
-                  <p className="field-error" style={{ marginTop: '0.5rem' }}>{resendMessage}</p>
-                ) : null}
-              </form>
-            ) : null}
-            {showResend && resendStatus === 'sent' ? (
-              <p className="muted" style={{ marginTop: '1rem' }}>{resendMessage}</p>
-            ) : null}
-            <Link className="btn btn-ghost" to="/">Back to home</Link>
-          </>
-        ) : null}
-      </div>
-    </AuthShell>
+    <VerifyShell>
+      {status === 'verifying' && (
+        <div className="verify-state">
+          <div className="verify-spinner-ring" />
+          <h2>Verifying your email</h2>
+          <p>Just a moment while we confirm your address…</p>
+        </div>
+      )}
+
+      {status === 'success' && (
+        <div className="verify-state">
+          <div className="verify-icon-wrap verify-icon-success">
+            <CheckCircle2 size={36} />
+          </div>
+          <h2>Email verified!</h2>
+          <p>{successMessage}</p>
+          <Link className="btn btn-primary" to={successTo} style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}>
+            {successLabel}
+          </Link>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="verify-state">
+          <div className="verify-icon-wrap verify-icon-error">
+            <XCircle size={36} />
+          </div>
+          <h2>Verification failed</h2>
+          <p className="verify-error-msg">{message}</p>
+
+          {showResend && resendStatus !== 'sent' && (
+            <form className="verify-resend-form" onSubmit={handleResend}>
+              <p className="verify-resend-label">Request a new link</p>
+              <Input
+                label="Your email address"
+                type="email"
+                value={resendEmail}
+                onChange={(e) => setResendEmail(e.target.value)}
+                required
+              />
+              <Button loading={resendStatus === 'loading'}>Resend verification email</Button>
+              {resendStatus === 'failed' && <p className="field-error">{resendMessage}</p>}
+            </form>
+          )}
+
+          {showResend && resendStatus === 'sent' && (
+            <div className="verify-sent-notice">
+              <CheckCircle2 size={18} />
+              <p>{resendMessage}</p>
+            </div>
+          )}
+
+          <div className="verify-divider" />
+          <Link to="/" className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>Back to home</Link>
+        </div>
+      )}
+    </VerifyShell>
   );
 }
 
@@ -220,24 +278,26 @@ export function VerifyEmailPage() {
 
   if (isAuthenticated && emailVerified) {
     return (
-      <AuthShell title="Email verification" subtitle="Confirming your email address.">
-        <div className="form-card center">
-          <CheckCircle2 size={40} />
-          <p>Your email is already verified.</p>
-          <Link className="btn btn-primary" to="/">Go to Bakeaura</Link>
+      <VerifyShell>
+        <div className="verify-state">
+          <div className="verify-icon-wrap verify-icon-success">
+            <CheckCircle2 size={36} />
+          </div>
+          <h2>Already verified</h2>
+          <p>Your email address is already confirmed — you are all set.</p>
+          <Link className="btn btn-primary" to="/" style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}>
+            Go to Bakeaura
+          </Link>
         </div>
-      </AuthShell>
+      </VerifyShell>
     );
   }
 
   return (
     <VerificationLanding
-      title="Email verification"
-      subtitle="Confirming your email address."
-      verifyFn={authApi.verifyEmail}
       successMessage="Your email is verified. You can now place orders and apply for roles."
       successTo="/"
-      successLabel="Go to Bakeaura"
+      successLabel="Start exploring"
       onSuccess={setEmailVerified}
       showResend
     />
@@ -248,9 +308,6 @@ export function VerifyEmailChangePage() {
   const { logout } = useAuthStore();
   return (
     <VerificationLanding
-      title="Confirm new email"
-      subtitle="Confirming your updated email address."
-      verifyFn={authApi.verifyEmailChange}
       successMessage="Your email has been updated. Please log in again with your new email."
       successTo="/login"
       successLabel="Go to login"

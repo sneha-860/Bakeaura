@@ -3,6 +3,7 @@ package com.bakeaura.payment;
 import com.bakeaura.order.Order;
 import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.order.OrderItem;
+import com.bakeaura.order.OrderService;
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.exception.BadRequestException;
@@ -11,6 +12,7 @@ import com.bakeaura.exception.ServiceUnavailableException;
 import com.bakeaura.order.OrderRepository;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
+import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
@@ -53,6 +55,8 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final OrderTrackingService orderTrackingService;
     private final NotificationService notificationService;
+    private final OrderService orderService;
+    private final ReferralOrderService referralOrderService;
 
     public PaymentService(RazorpayClient razorpayClient,
                           PaymentRepository paymentRepository,
@@ -60,7 +64,9 @@ public class PaymentService {
                           ProductService productService,
                           UserRepository userRepository,
                           OrderTrackingService orderTrackingService,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          OrderService orderService,
+                          ReferralOrderService referralOrderService) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
@@ -68,6 +74,8 @@ public class PaymentService {
         this.userRepository = userRepository;
         this.orderTrackingService = orderTrackingService;
         this.notificationService = notificationService;
+        this.orderService = orderService;
+        this.referralOrderService = referralOrderService;
     }
 
     @EventListener
@@ -158,26 +166,35 @@ public class PaymentService {
             throw new org.springframework.security.access.AccessDeniedException("Access denied");
         }
 
+        // Signature must be verified before any state change
         String payload = request.getRazorpayOrderId() + "|" + request.getRazorpayPaymentId();
         if (!verifySignature(payload, request.getRazorpaySignature(), keySecret)) {
             throw new BadRequestException("Invalid payment signature");
         }
 
         if (payment.getStatus() == PaymentStatus.PENDING) {
+
+            // Guard: prevent capturing payment for a cancelled order
+            if (order.getStatus() == OrderStatus.CANCELLED) {
+                throw new BadRequestException(
+                        "Order #" + order.getId() + " has been cancelled. " +
+                        "If your payment was deducted, please contact support for a refund.");
+            }
+
             payment.setRazorpayPaymentId(request.getRazorpayPaymentId());
             payment.setRazorpaySignature(request.getRazorpaySignature());
             payment.setStatus(PaymentStatus.CAPTURED);
             payment.setPaidAt(LocalDateTime.now());
             paymentRepository.save(payment);
 
+            // Decrement stock (within this transaction — optimistic lock on Product via @Version)
             reduceStock(order);
-            order.setStatus(OrderStatus.CONFIRMED);
-            orderRepository.save(order);
-            orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
-            notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED",
-                    "Payment of ₹" + order.getTotalAmount() + " received for order #" + order.getId() + ".", order.getId());
-            notifyIfUserPresent(order.getCustomer(), "PAYMENT_CONFIRMED",
-                    "Your payment of ₹" + order.getTotalAmount() + " for order #" + order.getId() + " was successful.", order.getId());
+
+            // Set order CONFIRMED, calculate ETA, send email/SMS, push notifications
+            orderService.confirmOrderAfterPayment(order);
+
+            // Credit referral commission now that payment is confirmed (not at order creation)
+            processReferralIfPresent(order);
         }
 
         return toResponse(payment);
@@ -197,7 +214,7 @@ public class PaymentService {
         if ("payment.captured".equals(eventType)) {
             handlePaymentCaptured(event, razorpaySignature);
         } else if ("payment.failed".equals(eventType)) {
-            handlePaymentFailed(event, razorpaySignature);
+            handlePaymentFailed(event);
         } else {
             log.info("Ignoring unsupported Razorpay webhook event: {}", eventType);
         }
@@ -215,7 +232,8 @@ public class PaymentService {
         Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId)
                 .orElseGet(() -> {
                     Order order = orderRepository.findByRazorpayOrderId(razorpayOrderId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Order not found for razorpay_order_id: " + razorpayOrderId));
+                            .orElseThrow(() -> new ResourceNotFoundException(
+                                    "Order not found for razorpay_order_id: " + razorpayOrderId));
                     return Payment.builder()
                             .order(order)
                             .razorpayOrderId(razorpayOrderId)
@@ -224,8 +242,28 @@ public class PaymentService {
                             .build();
                 });
 
+        // Idempotency guard: only process a PENDING payment
         if (payment.getStatus() != PaymentStatus.PENDING) {
             log.info("Payment {} is in status {}; ignoring webhook", razorpayPaymentId, payment.getStatus());
+            return;
+        }
+
+        Order order = payment.getOrder();
+
+        // Edge case: payment captured for an already-cancelled order
+        // Record the capture but do NOT confirm the order — customer must contact support for refund
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            payment.setRazorpayPaymentId(razorpayPaymentId);
+            payment.setRazorpaySignature(razorpaySignature);
+            payment.setStatus(PaymentStatus.CAPTURED);
+            payment.setPaidAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+            notifyIfUserPresent(order.getCustomer(), "REFUND_REQUIRED",
+                    "A payment of ₹" + order.getTotalAmount() + " was received for cancelled order #"
+                            + order.getId() + ". Please contact support for a refund.",
+                    order.getId());
+            log.warn("Payment {} captured for cancelled order {}. Manual refund required.",
+                    razorpayPaymentId, order.getId());
             return;
         }
 
@@ -235,18 +273,47 @@ public class PaymentService {
         payment.setPaidAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        Order order = payment.getOrder();
         reduceStock(order);
-        order.setStatus(OrderStatus.CONFIRMED);
-        orderRepository.save(order);
+        orderService.confirmOrderAfterPayment(order);
+        processReferralIfPresent(order);
 
-        orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CONFIRMED);
-        notifyIfUserPresent(order.getSeller(), "PAYMENT_CAPTURED",
-                "Payment of ₹" + order.getTotalAmount() + " received for order #" + order.getId() + ".", order.getId());
-        notifyIfUserPresent(order.getCustomer(), "PAYMENT_CONFIRMED",
-                "Your payment of ₹" + order.getTotalAmount() + " for order #" + order.getId() + " was successful.", order.getId());
+        log.info("Payment captured and order {} confirmed via webhook", order.getId());
+    }
 
-        log.info("Payment captured for order {}", order.getId());
+    private void handlePaymentFailed(JSONObject event) {
+        JSONObject paymentEntity = event
+                .getJSONObject("payload")
+                .getJSONObject("payment")
+                .getJSONObject("entity");
+
+        String razorpayOrderId = paymentEntity.getString("order_id");
+        String razorpayPaymentId = paymentEntity.optString("id", null);
+
+        paymentRepository.findByRazorpayOrderId(razorpayOrderId).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                log.info("Ignoring failed webhook for already captured payment {}", razorpayOrderId);
+                return;
+            }
+
+            payment.setRazorpayPaymentId(razorpayPaymentId);
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+
+            Order order = payment.getOrder();
+            order.setStatus(OrderStatus.CANCELLED);
+            orderRepository.save(order);
+
+            orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CANCELLED);
+
+            notifyIfUserPresent(order.getCustomer(), "PAYMENT_FAILED",
+                    "Payment failed for order #" + order.getId() + ". No charge was made.",
+                    order.getId());
+            notifyIfUserPresent(order.getSeller(), "ORDER_CANCELLED",
+                    "Order #" + order.getId() + " was automatically cancelled due to payment failure.",
+                    order.getId());
+
+            log.warn("Payment failed for order {}", order.getId());
+        });
     }
 
     private void reduceStock(Order order) {
@@ -266,33 +333,11 @@ public class PaymentService {
         }
     }
 
-    private void handlePaymentFailed(JSONObject event, String razorpaySignature) {
-        JSONObject paymentEntity = event
-                .getJSONObject("payload")
-                .getJSONObject("payment")
-                .getJSONObject("entity");
-
-        String razorpayOrderId = paymentEntity.getString("order_id");
-        String razorpayPaymentId = paymentEntity.optString("id", null);
-
-        paymentRepository.findByRazorpayOrderId(razorpayOrderId).ifPresent(payment -> {
-            if (payment.getStatus() == PaymentStatus.CAPTURED) {
-                log.info("Ignoring failed webhook for already captured payment {}", razorpayOrderId);
-                return;
-            }
-
-            payment.setRazorpayPaymentId(razorpayPaymentId);
-            payment.setRazorpaySignature(razorpaySignature);
-            payment.setStatus(PaymentStatus.FAILED);
-            paymentRepository.save(payment);
-
-            Order order = payment.getOrder();
-            order.setStatus(OrderStatus.CANCELLED);
-            orderRepository.save(order);
-            notifyIfUserPresent(order.getCustomer(), "PAYMENT_FAILED", "Payment failed for order #" + order.getId(), order.getId());
-
-            log.warn("Payment failed for order {}", order.getId());
-        });
+    private void processReferralIfPresent(Order order) {
+        String code = order.getReferralCode();
+        if (code != null && !code.isBlank()) {
+            referralOrderService.processReferral(order.getId(), code, order.getTotalAmount());
+        }
     }
 
     private boolean verifyWebhookSignature(String payload, String signature) {

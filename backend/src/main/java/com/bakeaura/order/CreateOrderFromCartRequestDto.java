@@ -32,4 +32,6 @@ public class CreateOrderFromCartRequestDto {
     private OrderType orderType;
 
     private String referralCode;
+
+    private String deliveryInstructions;
 }

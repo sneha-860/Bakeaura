@@ -66,11 +66,18 @@ public class Order {
     private Double deliveryLatitude;
     private Double deliveryLongitude;
 
+    @Column(nullable = true, length = 500)
+    private String deliveryInstructions;
+
     // Estimated delivery time in minutes (set when order is confirmed)
     private Integer estimatedDeliveryMinutes;
 
     // Razorpay order ID returned when we create an order on their system
     private String razorpayOrderId;
+
+    // Referral code string applied at checkout — stored for commission processing after payment capture
+    @Column(nullable = true)
+    private String referralCode;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

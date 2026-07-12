@@ -66,7 +66,7 @@ public class PayoutRequestService {
                 request.getInfluencerId(),
                 "PAYOUT_APPROVED",
                 "Your payout request of ₹" + request.getAmount() + " has been approved and will be transferred to your UPI shortly.",
-                null
+                saved.getId()
         );
 
         return saved;
@@ -94,7 +94,7 @@ public class PayoutRequestService {
                 "PAYOUT_REJECTED",
                 "Your payout request of ₹" + request.getAmount() + " was not approved." +
                         (note != null && !note.isBlank() ? " Reason: " + note : ""),
-                null
+                saved.getId()
         );
 
         return saved;
@@ -135,7 +135,7 @@ public class PayoutRequestService {
                 request.getInfluencerId(),
                 "PAYOUT_PAID",
                 "₹" + request.getAmount() + " has been transferred to your UPI account.",
-                null
+                saved.getId()
         );
 
         return saved;
