@@ -35,7 +35,9 @@ const productSchema = z.object({
   price: z.coerce.number().positive(),
   stockQuantity: z.preprocess((v) => (v === '' || v == null ? null : Number(v)), z.number().int().min(0).nullable().optional()),
   categoryId: z.coerce.number().positive(),
-  imageUrl: z.string().url().or(z.literal('')).optional()
+  imageUrl: z.string().url().or(z.literal('')).optional(),
+  isPreOrderOnly: z.boolean().optional(),
+  minAdvanceDays: z.preprocess((v) => (v === '' || v == null ? null : Number(v)), z.number().int().min(0).nullable().optional())
 });
 
 const payoutSchema = z.object({
@@ -71,8 +73,10 @@ const influencerProfileSchema = z.object({
 
 // Seller-accessible status transitions. PENDING → CONFIRMED is intentionally absent:
 // only PaymentService sets CONFIRMED after payment capture.
+// PENDING → CANCELLED is also absent: backend blocks sellers from cancelling a PENDING order
+// because the customer may be mid-payment. Sellers must wait for CONFIRMED before acting.
 const SELLER_NEXT = {
-  [OrderStatus.PENDING]: [OrderStatus.CANCELLED],
+  [OrderStatus.PENDING]: [],
   [OrderStatus.CONFIRMED]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
   [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELLED],
   [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
@@ -138,17 +142,19 @@ export function SellerDashboardPage() {
   }
 
   const gross = orders
-    .filter((order) => order.status === OrderStatus.DELIVERED)
+    .filter((order) => order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CANCELLED)
     .reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
 
   const canOpenShop = shopProfile?.shopName &&
     shopProfile?.deliveryRadiusKm &&
-    shopProfile?.productCount > 0;
+    shopProfile?.productCount > 0 &&
+    Boolean(me?.latitude);
 
   const setupChecklist = shopProfile ? [
     { label: 'Shop name', done: Boolean(shopProfile.shopName), required: true },
     { label: 'Delivery radius', done: Boolean(shopProfile.deliveryRadiusKm), required: true },
     { label: 'At least one product', done: shopProfile.productCount > 0, required: true },
+    { label: 'Shop location', done: Boolean(me?.latitude), required: true, hint: 'Set in your Profile page' },
     { label: 'Shop bio', done: Boolean(shopProfile.shopBio), required: false },
     { label: 'Banner image', done: Boolean(shopProfile.bannerImageUrl), required: false },
   ] : [];
@@ -186,7 +192,7 @@ export function SellerDashboardPage() {
               <li key={item.label} className={`setup-item ${item.done ? 'done' : item.required ? 'missing' : 'optional'}`}>
                 <span className="setup-icon">{item.done ? '✓' : item.required ? '✗' : '·'}</span>
                 {item.label}
-                {!item.done && item.required && <span className="setup-required"> — required to open</span>}
+                {!item.done && item.required && <span className="setup-required"> — required to open{item.hint ? ` (${item.hint})` : ''}</span>}
                 {!item.done && !item.required && <span className="setup-optional"> (optional)</span>}
               </li>
             ))}
@@ -537,19 +543,24 @@ export function AdminDashboardPage() {
 }
 
 export function AdminUsersPage() {
-  const { email: myEmail } = useAuthStore();
+  const { id: myId } = useAuthStore();
   const [role, setRole] = useState('');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const load = () => {
     setLoading(true);
     setError(null);
-    adminApi.users(role)
-      .then(setUsers)
+    adminApi.users(role, page)
+      .then(({ users: list, totalPages: tp }) => {
+        setUsers(list);
+        setTotalPages(tp);
+      })
       .catch((err) => {
         setError(err?.response?.data?.message || 'Failed to load users');
         setUsers([]);
@@ -557,7 +568,8 @@ export function AdminUsersPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [role]);
+  useEffect(load, [role, page]);
+  useEffect(() => { setPage(0); }, [role]);
 
   async function toggle(user) {
     setConfirmModal({
@@ -598,7 +610,7 @@ export function AdminUsersPage() {
   async function remove(id) {
     const user = users.find(u => u.id === id);
     setConfirmModal({
-      message: `Delete ${user?.name}? This cannot be undone.`,
+      message: `Deactivate ${user?.name}? Their data is preserved — you can re-activate them from this page.`,
       onConfirm: async () => {
         setActionLoading(id);
         try {
@@ -628,16 +640,23 @@ export function AdminUsersPage() {
           <div className="table-list">
             {users.map((user) => (
               <article className="table-row" key={user.id}>
-                <div style={{ display: 'grid', gap: '2px' }}><strong>{user.name}</strong><small style={{ color: 'var(--ink-soft)' }}>{user.email}{user.email === myEmail ? <span className="pill" style={{ marginLeft: 6, fontSize: '0.7rem' }}>You</span> : null}</small></div>
-                <select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)} disabled={actionLoading === user.id || user.email === myEmail}>
-                  {Object.values(Role).map((item) => <option key={item} value={item}>{item}</option>)}
+                <div style={{ display: 'grid', gap: '2px' }}><strong>{user.name}</strong><small style={{ color: 'var(--ink-soft)' }}>{user.email}{user.id === myId ? <span className="pill" style={{ marginLeft: 6, fontSize: '0.7rem' }}>You</span> : null}</small></div>
+                <select className="input compact-input" value={user.role} onChange={(event) => changeRole(user, event.target.value)} disabled={actionLoading === user.id || user.id === myId}>
+                  {Object.values(Role).filter((item) => item !== Role.ADMIN).map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
                 <span className={`pill ${user.isActive ? 'success' : 'danger'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
-                <Button variant="ghost" onClick={() => toggle(user)} disabled={actionLoading === user.id || user.email === myEmail}>{actionLoading === user.id ? '...' : (user.isActive ? 'Deactivate' : 'Activate')}</Button>
-                <Button variant="ghost" onClick={() => remove(user.id)} disabled={actionLoading === user.id || user.email === myEmail}>{actionLoading === user.id ? '...' : 'Delete'}</Button>
+                <Button variant="ghost" onClick={() => toggle(user)} disabled={actionLoading === user.id || user.id === myId}>{actionLoading === user.id ? '...' : (user.isActive ? 'Deactivate' : 'Activate')}</Button>
+                <Button variant="ghost" onClick={() => remove(user.id)} disabled={actionLoading === user.id || user.id === myId}>{actionLoading === user.id ? '...' : 'Delete'}</Button>
               </article>
             ))}
             {!users.length ? <EmptyState title="No users found" /> : null}
+          </div>
+        )}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', paddingTop: 16 }}>
+            <Button variant="ghost" onClick={() => setPage((p) => p - 1)} disabled={page === 0}>Previous</Button>
+            <span style={{ lineHeight: '36px', fontSize: '0.9rem', color: 'var(--ink-soft)' }}>Page {page + 1} of {totalPages}</span>
+            <Button variant="ghost" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1}>Next</Button>
           </div>
         )}
       </div>
@@ -658,7 +677,9 @@ export function AdminApplicationsPage() {
   const [status, setStatus] = useState(ApplicationStatus.PENDING);
   const [applications, setApplications] = useState([]);
   const [rejectTarget, setRejectTarget] = useState(null);
+  const [approveTarget, setApproveTarget] = useState(null);
   const [note, setNote] = useState('');
+  const [approveNote, setApproveNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
@@ -679,11 +700,14 @@ export function AdminApplicationsPage() {
 
   useEffect(load, [status]);
 
-  async function approve(app) {
-    setActionLoading(app.id);
+  async function doApprove() {
+    if (!approveTarget) return;
+    setActionLoading(approveTarget.id);
     try {
-      await roleApplicationsApi.approve(app.id, '');
+      await roleApplicationsApi.approve(approveTarget.id, approveNote);
       toast.success('Application approved');
+      setApproveTarget(null);
+      setApproveNote('');
       load();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to approve application');
@@ -775,7 +799,7 @@ export function AdminApplicationsPage() {
                     <div className="app-actions">
                       <Button
                         variant="ghost"
-                        onClick={() => approve(app)}
+                        onClick={() => { setApproveTarget(app); setApproveNote(''); }}
                         disabled={actionLoading === app.id}
                         style={{ fontSize: '0.82rem', minHeight: 34, padding: '6px 14px', color: '#315b2b', borderColor: '#a3d1a0' }}
                       >
@@ -796,6 +820,26 @@ export function AdminApplicationsPage() {
             ))}
             {!applications.length ? <EmptyState title="No applications" /> : null}
           </div>
+          <Modal open={Boolean(approveTarget)} title="Approve application" onClose={() => setApproveTarget(null)}>
+            <div className="form-card">
+              {approveTarget && (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--espresso)' }}>
+                  Approving <strong>{approveTarget.userName}</strong>'s {approveTarget.requestedRole} application.
+                </p>
+              )}
+              <Input label="Review note (optional — shown to applicant)" as="textarea" rows="2" value={approveNote} onChange={(event) => setApproveNote(event.target.value)} />
+              <div className="modal-actions">
+                <Button
+                  onClick={doApprove}
+                  disabled={actionLoading === approveTarget?.id}
+                  style={{ color: '#315b2b', borderColor: '#a3d1a0' }}
+                >
+                  {actionLoading === approveTarget?.id ? 'Processing...' : 'Confirm approval'}
+                </Button>
+                <Button variant="ghost" onClick={() => setApproveTarget(null)}>Cancel</Button>
+              </div>
+            </div>
+          </Modal>
           <Modal open={Boolean(rejectTarget)} title="Reject application" onClose={() => setRejectTarget(null)}>
             <div className="form-card">
               {rejectTarget && (
@@ -1355,6 +1399,7 @@ export function AdminCategoriesPage() {
 }
 
 function ProductForm({ form, categories, onSubmit, editing, onCancel }) {
+  const isPreOrderOnly = form.watch('isPreOrderOnly');
   return (
     <form className="form-card compact" onSubmit={form.handleSubmit(onSubmit)}>
       <h2>{editing ? 'Edit product' : 'Add product'}</h2>
@@ -1373,6 +1418,19 @@ function ProductForm({ form, categories, onSubmit, editing, onCancel }) {
         {form.formState.errors.categoryId ? <small className="field-error">{form.formState.errors.categoryId.message}</small> : null}
       </label>
       <Input label="Image URL" error={form.formState.errors.imageUrl?.message} {...form.register('imageUrl')} />
+      <label className="check-row">
+        <input type="checkbox" {...form.register('isPreOrderOnly')} />
+        Pre-order only (customers must schedule in advance)
+      </label>
+      {isPreOrderOnly && (
+        <Input
+          label="Minimum advance days"
+          type="number"
+          placeholder="e.g. 2 (customers must order 2+ days ahead)"
+          error={form.formState.errors.minAdvanceDays?.message}
+          {...form.register('minAdvanceDays')}
+        />
+      )}
       <div style={{ display: 'flex', gap: 8 }}>
         <Button>{editing ? 'Update product' : 'Add product'}</Button>
         {editing ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button> : null}

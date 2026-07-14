@@ -69,12 +69,11 @@ public class AddressService {
     }
 
     private void clearDefaults(User user, Long exceptId) {
-        addressRepository.findByUserOrderByDefaultAddressDescCreatedAtDesc(user).forEach(address -> {
-            if (exceptId == null || !address.getId().equals(exceptId)) {
-                address.setDefaultAddress(false);
-                addressRepository.save(address);
-            }
-        });
+        if (exceptId == null) {
+            addressRepository.clearAllDefaults(user);
+        } else {
+            addressRepository.clearDefaultsExcept(user, exceptId);
+        }
     }
 
     private Address getOwnedAddress(Long id, User user) {

@@ -37,8 +37,8 @@ export function MyOrdersPage() {
   const [filter, setFilter] = useState('');
 
   async function load() {
-    const page = await ordersApi.myOrders().catch(() => null);
-    setOrders(page?.content || []);
+    const result = await ordersApi.myOrders().catch(() => []);
+    setOrders(Array.isArray(result) ? result : []);
   }
   useEffect(() => { load(); }, []);
 

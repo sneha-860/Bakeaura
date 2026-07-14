@@ -10,15 +10,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+// Represents either a product favourite (product non-null, seller null)
+// or a seller favourite (seller non-null, product null). Exactly one must be set.
+// Uniqueness enforced at service layer (existsByUserAndProduct / existsByUserAndSeller).
 @Entity
-@Table(name = "favorites", uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "product_id"}))
+@Table(name = "favorites")
 @Data
 @NoArgsConstructor
 public class Favorite {
@@ -30,9 +32,13 @@ public class Favorite {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "product_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "product_id", nullable = true)
     private Product product;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "seller_id", nullable = true)
+    private User seller;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

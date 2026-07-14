@@ -1,6 +1,8 @@
 package com.bakeaura.payment;
 
+import com.bakeaura.cart.CartService;
 import com.bakeaura.order.Order;
+import com.bakeaura.order.OrderCancelledEvent;
 import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.order.OrderItem;
 import com.bakeaura.order.OrderService;
@@ -9,13 +11,11 @@ import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.exception.ServiceUnavailableException;
-import com.bakeaura.order.OrderRepository;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
-import com.bakeaura.websocket.OrderTrackingService;
 import com.bakeaura.notification.NotificationService;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
@@ -23,6 +23,7 @@ import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,32 +51,32 @@ public class PaymentService {
 
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
-    private final OrderRepository orderRepository;
     private final ProductService productService;
     private final UserRepository userRepository;
-    private final OrderTrackingService orderTrackingService;
     private final NotificationService notificationService;
     private final OrderService orderService;
     private final ReferralOrderService referralOrderService;
+    private final CartService cartService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PaymentService(RazorpayClient razorpayClient,
                           PaymentRepository paymentRepository,
-                          OrderRepository orderRepository,
                           ProductService productService,
                           UserRepository userRepository,
-                          OrderTrackingService orderTrackingService,
                           NotificationService notificationService,
                           OrderService orderService,
-                          ReferralOrderService referralOrderService) {
+                          ReferralOrderService referralOrderService,
+                          CartService cartService,
+                          ApplicationEventPublisher eventPublisher) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
-        this.orderRepository = orderRepository;
         this.productService = productService;
         this.userRepository = userRepository;
-        this.orderTrackingService = orderTrackingService;
         this.notificationService = notificationService;
         this.orderService = orderService;
         this.referralOrderService = referralOrderService;
+        this.cartService = cartService;
+        this.eventPublisher = eventPublisher;
     }
 
     @EventListener
@@ -83,9 +84,45 @@ public class PaymentService {
     public void handleOrderCreated(OrderCreatedEvent event) {
         Order order = event.getOrder();
         String razorpayOrderId = createRazorpayOrder(order.getTotalAmount(), order.getId());
-        order.setRazorpayOrderId(razorpayOrderId);
-        orderRepository.save(order);
+        // Sets razorpayOrderId + paymentStatus=PENDING on the Order and persists it.
+        orderService.setRazorpayOrderId(order, razorpayOrderId);
         createPendingPayment(order, razorpayOrderId);
+    }
+
+    // Triggered when an order is cancelled (by customer, seller, or payment failure flow).
+    // Checks whether the payment was already captured and, if so, initiates a Razorpay refund.
+    @EventListener
+    @Transactional
+    public void handleOrderCancelled(OrderCancelledEvent event) {
+        Order order = event.getOrder();
+        paymentRepository.findByOrder_Id(order.getId()).ifPresent(payment -> {
+            if (payment.getStatus() == PaymentStatus.CAPTURED) {
+                try {
+                    JSONObject refundRequest = new JSONObject();
+                    refundRequest.put("amount", toPaise(payment.getAmount()));
+                    refundRequest.put("speed", "normal");
+                    razorpayClient.payments.refund(payment.getRazorpayPaymentId(), refundRequest);
+
+                    payment.setStatus(PaymentStatus.REFUNDED);
+                    paymentRepository.save(payment);
+                    orderService.markPaymentRefunded(order);
+                    notifyIfUserPresent(order.getCustomer(), "REFUND_INITIATED",
+                            "Order #" + order.getId() + " was cancelled. Your payment of ₹"
+                                    + order.getTotalAmount()
+                                    + " will be refunded within 5–7 business days.",
+                            order.getId());
+                    log.info("Refund initiated via Razorpay for order {} payment {}",
+                            order.getId(), payment.getRazorpayPaymentId());
+                } catch (RazorpayException e) {
+                    log.error("Razorpay refund failed for order {} payment {}: {}",
+                            order.getId(), payment.getRazorpayPaymentId(), e.getMessage());
+                    notifyIfUserPresent(order.getCustomer(), "REFUND_FAILED",
+                            "Order #" + order.getId() + " was cancelled but the refund could not be " +
+                                    "processed automatically. Please contact support to request your refund.",
+                            order.getId());
+                }
+            }
+        });
     }
 
     @CircuitBreaker(name = "razorpay", fallbackMethod = "createRazorpayOrderFallback")
@@ -150,7 +187,7 @@ public class PaymentService {
     }
 
     public long countPayments() {
-        return paymentRepository.count();
+        return paymentRepository.countByStatus(PaymentStatus.CAPTURED);
     }
 
     @Transactional
@@ -190,11 +227,17 @@ public class PaymentService {
             // Decrement stock (within this transaction — optimistic lock on Product via @Version)
             reduceStock(order);
 
-            // Set order CONFIRMED, calculate ETA, send email/SMS, push notifications
-            orderService.confirmOrderAfterPayment(order);
+            // Publishes PaymentCapturedEvent → OrderService.handlePaymentCapture sets
+            // paymentStatus=CAPTURED on Order and calls confirmOrderAfterPayment.
+            eventPublisher.publishEvent(new PaymentCapturedEvent(this, order));
 
             // Credit referral commission now that payment is confirmed (not at order creation)
             processReferralIfPresent(order);
+
+            // Remove only this seller's items from cart — items from other sellers are preserved
+            if (order.getCustomer() != null && order.getSeller() != null) {
+                cartService.clearItemsBySeller(order.getCustomer().getId(), order.getSeller().getId());
+            }
         }
 
         return toResponse(payment);
@@ -231,9 +274,7 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId)
                 .orElseGet(() -> {
-                    Order order = orderRepository.findByRazorpayOrderId(razorpayOrderId)
-                            .orElseThrow(() -> new ResourceNotFoundException(
-                                    "Order not found for razorpay_order_id: " + razorpayOrderId));
+                    Order order = orderService.findOrderByRazorpayOrderId(razorpayOrderId);
                     return Payment.builder()
                             .order(order)
                             .razorpayOrderId(razorpayOrderId)
@@ -250,14 +291,15 @@ public class PaymentService {
 
         Order order = payment.getOrder();
 
-        // Edge case: payment captured for an already-cancelled order
-        // Record the capture but do NOT confirm the order — customer must contact support for refund
+        // Edge case: payment captured for an already-cancelled order.
+        // Record the capture but do NOT confirm the order — customer must contact support for refund.
         if (order.getStatus() == OrderStatus.CANCELLED) {
             payment.setRazorpayPaymentId(razorpayPaymentId);
             payment.setRazorpaySignature(razorpaySignature);
             payment.setStatus(PaymentStatus.CAPTURED);
             payment.setPaidAt(LocalDateTime.now());
             paymentRepository.save(payment);
+            orderService.updatePaymentStatus(order, PaymentStatus.CAPTURED);
             notifyIfUserPresent(order.getCustomer(), "REFUND_REQUIRED",
                     "A payment of ₹" + order.getTotalAmount() + " was received for cancelled order #"
                             + order.getId() + ". Please contact support for a refund.",
@@ -274,8 +316,13 @@ public class PaymentService {
         paymentRepository.save(payment);
 
         reduceStock(order);
-        orderService.confirmOrderAfterPayment(order);
+        eventPublisher.publishEvent(new PaymentCapturedEvent(this, order));
         processReferralIfPresent(order);
+
+        // Remove only this seller's items from cart — items from other sellers are preserved
+        if (order.getCustomer() != null && order.getSeller() != null) {
+            cartService.clearItemsBySeller(order.getCustomer().getId(), order.getSeller().getId());
+        }
 
         log.info("Payment captured and order {} confirmed via webhook", order.getId());
     }
@@ -300,16 +347,11 @@ public class PaymentService {
             paymentRepository.save(payment);
 
             Order order = payment.getOrder();
-            order.setStatus(OrderStatus.CANCELLED);
-            orderRepository.save(order);
-
-            orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CANCELLED);
+            // Cancels the order, sets paymentStatus=FAILED, broadcasts WebSocket, notifies seller.
+            orderService.markOrderCancelledByPaymentFailure(order);
 
             notifyIfUserPresent(order.getCustomer(), "PAYMENT_FAILED",
                     "Payment failed for order #" + order.getId() + ". No charge was made.",
-                    order.getId());
-            notifyIfUserPresent(order.getSeller(), "ORDER_CANCELLED",
-                    "Order #" + order.getId() + " was automatically cancelled due to payment failure.",
                     order.getId());
 
             log.warn("Payment failed for order {}", order.getId());
@@ -328,7 +370,12 @@ public class PaymentService {
                 throw new BadRequestException("Insufficient stock for product " + product.getId());
             }
 
-            product.setStockQuantity(product.getStockQuantity() - item.getQuantity());
+            int newStock = product.getStockQuantity() - item.getQuantity();
+            product.setStockQuantity(Math.max(newStock, 0));
+            // Auto-hide the product when stock reaches zero so customers cannot add it to cart.
+            if (product.getStockQuantity() == 0) {
+                product.setIsAvailable(false);
+            }
             productService.saveProduct(product);
         }
     }

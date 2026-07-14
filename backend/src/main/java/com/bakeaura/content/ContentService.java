@@ -1,7 +1,7 @@
 package com.bakeaura.content;
 
 import com.bakeaura.reel.Reel;
-import com.bakeaura.reel.ReelRepository;
+import com.bakeaura.reel.ReelService;
 import com.bakeaura.review.ReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,13 +18,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ContentService {
 
-    private final ReelRepository reelRepository;
+    private final ReelService reelService;
     private final ReviewService reviewService;
 
     @Transactional(readOnly = true)
     public List<FeedItem> getRankedFeed() {
 
-        List<Reel> activeReels = reelRepository.findAllActive();
+        List<Reel> activeReels = reelService.getAllActiveReels();
 
         if (activeReels.isEmpty()) {
             return List.of();

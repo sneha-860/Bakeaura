@@ -35,8 +35,11 @@ public class RoleApplication {
     @Column(nullable = false)
     private ApplicationStatus status = ApplicationStatus.PENDING;
 
-    @Column(length = 1000)
+    @Column(length = 2000)
     private String message;
+
+    // Phone submitted at application time — copied to User.phone only on approval
+    private String phone;
 
     // For INFLUENCER applications — admin needs these to verify the applicant
     private String socialUrl;

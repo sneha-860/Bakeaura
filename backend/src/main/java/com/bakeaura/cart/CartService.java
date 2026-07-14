@@ -1,14 +1,12 @@
 package com.bakeaura.cart;
 
 import com.bakeaura.exception.BadRequestException;
-import com.bakeaura.order.OrderCreatedEvent;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -127,11 +125,20 @@ public class CartService {
         redisTemplate.delete(cartKey(user.getId()));
     }
 
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        User user = userRepository.findByEmail(event.getCustomerEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        clearCart(user.getId());
+    // Called after payment is captured — removes only the paid seller's items.
+    // Items from other sellers remain so the customer can check out separately.
+    public void clearItemsBySeller(Long userId, Long sellerId) {
+        User user = getUserById(userId);
+        Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
+        if (!(cached instanceof CartDto cart)) {
+            return;
+        }
+        cart.getItems().removeIf(item -> sellerId.equals(item.getSellerId()));
+        if (cart.getItems().isEmpty()) {
+            redisTemplate.delete(cartKey(user.getId()));
+        } else {
+            saveCart(user, cart);
+        }
     }
 
     private void saveCart(User user, CartDto cart) {

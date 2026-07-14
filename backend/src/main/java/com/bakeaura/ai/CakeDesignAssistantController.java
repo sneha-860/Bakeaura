@@ -1,7 +1,7 @@
 package com.bakeaura.ai;
 
 import com.bakeaura.common.ApiResponse;
-import com.bakeaura.customorder.CustomOrderRequest;
+import com.bakeaura.customorder.CustomOrderResponseDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -40,7 +40,7 @@ public class CakeDesignAssistantController {
 
         Long customerId = Long.parseLong(authentication.getName());
 
-        CustomOrderRequest result = cakeDesignAssistantService.confirmAndSubmit(customerId, dto);
+        CustomOrderResponseDto result = cakeDesignAssistantService.confirmAndSubmit(customerId, dto);
 
         CakeDesignChatResponseDto response = new CakeDesignChatResponseDto(
                 result.getId(),

@@ -46,9 +46,7 @@ public class ProductController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductDto>> getById(@PathVariable Long id) {
-        return productService.getProductById(id)
-                .map(p -> ResponseEntity.ok(ApiResponse.ok("Found", p)))
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.ok(ApiResponse.ok("Found", productService.getProductById(id)));
     }
 
     @PutMapping("/{id}")

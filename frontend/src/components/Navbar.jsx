@@ -15,7 +15,7 @@ import { ApplicationStatus } from '../api/enums';
 
 export default function Navbar() {
     const navigate = useNavigate();
-    const { isAuthenticated, role, email, name, logout, cartCount, setCartCount, emailVerified, accessToken } = useAuthStore();
+    const { isAuthenticated, role, email, name, logout, cartCount, setCartCount, emailVerified, id: userId } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [unread, setUnread] = useState(0);
@@ -36,14 +36,7 @@ export default function Navbar() {
     }, [isAuthenticated, role]);
 
     useEffect(() => {
-        if (!isAuthenticated || !accessToken) return;
-
-        let userId;
-        try {
-            userId = JSON.parse(atob(accessToken.split('.')[1])).sub;
-        } catch {
-            return;
-        }
+        if (!isAuthenticated || !userId) return;
 
         const client = createSocketClient();
         client.onConnect = () => {
@@ -54,7 +47,7 @@ export default function Navbar() {
         client.activate();
 
         return () => { client.deactivate(); };
-    }, [isAuthenticated, accessToken]);
+    }, [isAuthenticated, userId]);
 
     useEffect(() => {
         function handleClickOutside(event) {

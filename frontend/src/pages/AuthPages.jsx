@@ -13,14 +13,14 @@ import { useAuthStore } from '../store/useAuthStore';
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6)
+  password: z.string().min(8, 'Password must be at least 8 characters')
 });
 
 const registerSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
-  password: z.string().min(6),
-  confirmPassword: z.string().min(6),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string().min(8, 'Password must be at least 8 characters'),
   terms: z.literal(true, { errorMap: () => ({ message: 'Accept terms to continue' }) })
 }).refine((value) => value.password === value.confirmPassword, {
   message: 'Passwords must match',

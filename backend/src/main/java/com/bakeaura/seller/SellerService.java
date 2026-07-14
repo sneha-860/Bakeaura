@@ -14,17 +14,19 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.bakeaura.order.Order;
-import com.bakeaura.order.OrderItem;
+import com.bakeaura.order.OrderRepository;
 import com.bakeaura.order.OrderService;
 import com.bakeaura.enums.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.Map;
-import java.util.stream.Collectors;
-
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,9 +38,12 @@ public class SellerService {
     private final MapService mapService;
     private final ReviewService reviewService;
     private final OrderService orderService;
+    private final OrderRepository orderRepository;
 
+    @Cacheable("sellerList")
     public List<SellerProfileDto> getSellers() {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
+                .filter(this::isShopVisible)
                 .map(this::toDto)
                 .toList();
     }
@@ -53,6 +58,7 @@ public class SellerService {
 
     public List<SellerProfileDto> getNearbySellers(double latitude, double longitude, double radius) {
         return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
+                .filter(this::isShopVisible)
                 .filter(seller -> seller.getLatitude() != null && seller.getLongitude() != null)
                 .filter(seller -> mapService.calculateDistance(
                         latitude, longitude,
@@ -62,7 +68,7 @@ public class SellerService {
     }
 
     @Transactional
-    @CacheEvict(value = "sellerProfiles", key = "#userId")
+    @CacheEvict(value = {"sellerProfiles", "sellerList"}, allEntries = true)
     public SellerProfileDto updateProfile(Long userId, UpdateSellerProfileDto request) {
         User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -84,7 +90,7 @@ public class SellerService {
     }
 
     @Transactional
-    @CacheEvict(value = "sellerProfiles", key = "#userId")
+    @CacheEvict(value = {"sellerProfiles", "sellerList"}, allEntries = true)
     public SellerProfileDto toggleOpen(Long userId) {
         User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -103,6 +109,9 @@ public class SellerService {
             }
             if (profile.getDeliveryRadiusKm() == null) {
                 throw new BadRequestException("Set your delivery radius before opening for business");
+            }
+            if (seller.getLatitude() == null || seller.getLongitude() == null) {
+                throw new BadRequestException("Set your shop location before opening for business — customers need it for distance and delivery calculations");
             }
             if (productService.countProductsBySeller(userId) == 0) {
                 throw new BadRequestException("Add at least one product before opening for business");
@@ -127,6 +136,27 @@ public class SellerService {
         }
     }
 
+    // A seller appears in public listings only when: shop is open AND name is set AND at least one product.
+    private boolean isShopVisible(User seller) {
+        SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
+        if (profile == null || profile.getShopName() == null || profile.getShopName().isBlank()) {
+            return false;
+        }
+        if (!Boolean.TRUE.equals(profile.getIsOpen())) {
+            return false;
+        }
+        return productService.countProductsBySeller(seller.getId()) > 0;
+    }
+
+    @Transactional
+    @CacheEvict(value = {"sellerProfiles", "sellerList"}, allEntries = true)
+    public void closeShopOnDemotion(Long userId) {
+        sellerProfileRepository.findByUserId(userId).ifPresent(profile -> {
+            profile.setIsOpen(false);
+            sellerProfileRepository.save(profile);
+        });
+    }
+
     private SellerProfileDto toDto(User seller) {
         SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
 
@@ -146,8 +176,6 @@ public class SellerService {
         return SellerProfileDto.builder()
                 .id(seller.getId())
                 .name(seller.getName())
-                .latitude(seller.getLatitude())
-                .longitude(seller.getLongitude())
                 .shopName(profile != null ? profile.getShopName() : null)
                 .shopBio(profile != null ? profile.getShopBio() : null)
                 .deliveryRadiusKm(profile != null ? profile.getDeliveryRadiusKm() : null)
@@ -168,46 +196,49 @@ public class SellerService {
             throw new BadRequestException("User is not a seller");
         }
 
-        List<Order> orders = orderService.getOrdersBySellerForAnalytics(sellerId);
-
-        List<Order> revenueOrders = orders.stream()
-                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
-                .toList();
-
-        BigDecimal totalRevenueAllTime = revenueOrders.stream()
-                .map(Order::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
         LocalDate today = LocalDate.now();
-        LocalDate startOfMonth = today.withDayOfMonth(1);
-        LocalDate startOfWeek = today.minusDays(today.getDayOfWeek().getValue() - 1);
+        LocalDateTime startOfMonth = today.withDayOfMonth(1).atStartOfDay();
+        LocalDateTime startOfWeek = today.minusDays(today.getDayOfWeek().getValue() - 1).atStartOfDay();
 
-        BigDecimal totalRevenueThisMonth = revenueOrders.stream()
-                .filter(o -> !o.getCreatedAt().toLocalDate().isBefore(startOfMonth))
-                .map(Order::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalRevenueAllTime = Optional.ofNullable(
+                orderRepository.sumRevenueBySellerExcludingPendingAndCancelled(sellerId))
+                .orElse(BigDecimal.ZERO);
 
-        BigDecimal totalRevenueThisWeek = revenueOrders.stream()
-                .filter(o -> !o.getCreatedAt().toLocalDate().isBefore(startOfWeek))
-                .map(Order::getTotalAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalRevenueThisMonth = Optional.ofNullable(
+                orderRepository.sumRevenueBySellerSince(sellerId, startOfMonth))
+                .orElse(BigDecimal.ZERO);
 
-        Map<String, Long> orderCountsByStatus = orders.stream()
-                .collect(Collectors.groupingBy(o -> o.getStatus().name(), Collectors.counting()));
+        BigDecimal totalRevenueThisWeek = Optional.ofNullable(
+                orderRepository.sumRevenueBySellerSince(sellerId, startOfWeek))
+                .orElse(BigDecimal.ZERO);
 
-        BigDecimal averageOrderValue = revenueOrders.isEmpty()
+        Map<String, Long> orderCountsByStatus = orderRepository
+                .countOrdersByStatusForSeller(sellerId)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> row[0].toString(),
+                        row -> (Long) row[1]
+                ));
+
+        long revenueOrderCount = orderCountsByStatus.entrySet().stream()
+                .filter(e -> !e.getKey().equals(OrderStatus.PENDING.name())
+                        && !e.getKey().equals(OrderStatus.CANCELLED.name()))
+                .mapToLong(Map.Entry::getValue)
+                .sum();
+
+        BigDecimal averageOrderValue = revenueOrderCount == 0
                 ? BigDecimal.ZERO
-                : totalRevenueAllTime.divide(BigDecimal.valueOf(revenueOrders.size()), 2, RoundingMode.HALF_UP);
+                : totalRevenueAllTime.divide(BigDecimal.valueOf(revenueOrderCount), 2, RoundingMode.HALF_UP);
 
-        Map<String, Long> quantityByProduct = revenueOrders.stream()
-                .flatMap(o -> o.getItems().stream())
-                .collect(Collectors.groupingBy(
-                        item -> item.getProduct().getName(),
-                        Collectors.summingLong(OrderItem::getQuantity)));
-
-        Map.Entry<String, Long> bestSelling = quantityByProduct.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .orElse(null);
+        Page<Object[]> bestSellerPage = orderRepository.findBestSellingProductsBySeller(
+                sellerId, PageRequest.of(0, 1));
+        String bestSellingProductName = null;
+        Long bestSellingProductQuantity = 0L;
+        if (!bestSellerPage.isEmpty()) {
+            Object[] top = bestSellerPage.getContent().get(0);
+            bestSellingProductName = (String) top[0];
+            bestSellingProductQuantity = (Long) top[1];
+        }
 
         ReviewSummaryDto reviewSummary = reviewService.getSummary(sellerId);
 
@@ -217,8 +248,8 @@ public class SellerService {
                 .totalRevenueThisWeek(totalRevenueThisWeek)
                 .orderCountsByStatus(orderCountsByStatus)
                 .averageOrderValue(averageOrderValue)
-                .bestSellingProductName(bestSelling != null ? bestSelling.getKey() : null)
-                .bestSellingProductQuantity(bestSelling != null ? bestSelling.getValue() : 0L)
+                .bestSellingProductName(bestSellingProductName)
+                .bestSellingProductQuantity(bestSellingProductQuantity)
                 .averageRating(reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
                 .totalRatings(reviewSummary.getReviewCount() != null ? reviewSummary.getReviewCount().intValue() : 0)
                 .build();

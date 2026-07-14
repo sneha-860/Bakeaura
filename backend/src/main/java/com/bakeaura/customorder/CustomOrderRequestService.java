@@ -4,6 +4,7 @@ import com.bakeaura.enums.CustomOrderStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.notification.NotificationService;
+import com.bakeaura.user.User;
 import com.bakeaura.user.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,7 @@ public class CustomOrderRequestService {
     private final NotificationService notificationService;
 
     @Transactional
-    public CustomOrderRequest submitRequest(
+    public CustomOrderResponseDto submitRequest(
             Long customerId,
             Long sellerId,
             String designBrief,
@@ -30,14 +31,19 @@ public class CustomOrderRequestService {
             BigDecimal budgetMin,
             BigDecimal budgetMax) {
 
+        User customer = userService.getById(customerId);
+
+        if (!Boolean.TRUE.equals(customer.getIsEmailVerified())) {
+            throw new BadRequestException("Please verify your email address before submitting a custom order request");
+        }
+
         if (!userService.isActiveSeller(sellerId)) {
             throw new BadRequestException("Selected seller is not a valid active seller");
         }
 
         if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
                 customerId, sellerId, CustomOrderStatus.PENDING)) {
-            throw new BadRequestException(
-                    "You already have a pending request with this seller");
+            throw new BadRequestException("You already have a pending request with this seller");
         }
 
         CustomOrderRequest request = new CustomOrderRequest();
@@ -59,11 +65,61 @@ public class CustomOrderRequestService {
                 saved.getId()
         );
 
-        return saved;
+        return toDto(saved);
     }
 
     @Transactional
-    public CustomOrderRequest acceptRequest(Long requestId, Long sellerId) {
+    public CustomOrderResponseDto submitAiGeneratedRequest(
+            Long customerId,
+            Long sellerId,
+            String designBrief,
+            String generatedImageUrl,
+            String occasion,
+            Integer serves,
+            BigDecimal budgetMin,
+            BigDecimal budgetMax) {
+
+        User aiCustomer = userService.getById(customerId);
+
+        if (!Boolean.TRUE.equals(aiCustomer.getIsEmailVerified())) {
+            throw new BadRequestException("Please verify your email address before submitting a custom order request");
+        }
+
+        if (!userService.isActiveSeller(sellerId)) {
+            throw new BadRequestException("Selected seller is not a valid active seller");
+        }
+
+        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
+                customerId, sellerId, CustomOrderStatus.PENDING)) {
+            throw new BadRequestException("You already have a pending request with this seller");
+        }
+
+        CustomOrderRequest request = new CustomOrderRequest();
+        request.setCustomerId(customerId);
+        request.setSellerId(sellerId);
+        request.setDesignBrief(designBrief);
+        request.setGeneratedImageUrl(generatedImageUrl);
+        request.setOccasion(occasion);
+        request.setServes(serves);
+        request.setBudgetMin(budgetMin);
+        request.setBudgetMax(budgetMax);
+
+        CustomOrderRequest saved = customOrderRequestRepository.save(request);
+
+        // Notify the seller — same as the manual path
+        String customerName = userService.getUserName(customerId);
+        notificationService.notifyUser(
+                sellerId,
+                "CUSTOM_ORDER_REQUEST",
+                customerName + " has sent you an AI-designed custom cake request.",
+                saved.getId()
+        );
+
+        return toDto(saved);
+    }
+
+    @Transactional
+    public CustomOrderResponseDto acceptRequest(Long requestId, Long sellerId) {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
         if (request.getStatus() != CustomOrderStatus.PENDING) {
@@ -81,11 +137,11 @@ public class CustomOrderRequestService {
                 saved.getId()
         );
 
-        return saved;
+        return toDto(saved);
     }
 
     @Transactional
-    public CustomOrderRequest rejectRequest(Long requestId, Long sellerId) {
+    public CustomOrderResponseDto rejectRequest(Long requestId, Long sellerId) {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
         if (request.getStatus() != CustomOrderStatus.PENDING) {
@@ -103,15 +159,17 @@ public class CustomOrderRequestService {
                 saved.getId()
         );
 
-        return saved;
+        return toDto(saved);
     }
 
     @Transactional
-    public CustomOrderRequest sendQuote(Long requestId, Long sellerId, BigDecimal quote) {
+    public CustomOrderResponseDto sendQuote(Long requestId, Long sellerId, BigDecimal quote) {
         CustomOrderRequest request = findAndValidateSeller(requestId, sellerId);
 
-        if (request.getStatus() != CustomOrderStatus.PENDING) {
-            throw new BadRequestException("Only PENDING requests can be quoted");
+        // Allow re-quoting from QUOTED as well as initial quoting from PENDING
+        if (request.getStatus() != CustomOrderStatus.PENDING
+                && request.getStatus() != CustomOrderStatus.QUOTED) {
+            throw new BadRequestException("Quotes can only be sent for PENDING or QUOTED requests");
         }
 
         request.setStatus(CustomOrderStatus.QUOTED);
@@ -126,23 +184,26 @@ public class CustomOrderRequestService {
                 saved.getId()
         );
 
-        return saved;
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)
-    public List<CustomOrderRequest> getRequestsForCustomer(Long customerId) {
-        return customOrderRequestRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+    public List<CustomOrderResponseDto> getRequestsForCustomer(Long customerId) {
+        return customOrderRequestRepository.findByCustomerIdOrderByCreatedAtDesc(customerId)
+                .stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<CustomOrderRequest> getPendingRequestsForSeller(Long sellerId) {
+    public List<CustomOrderResponseDto> getPendingRequestsForSeller(Long sellerId) {
         return customOrderRequestRepository.findBySellerIdAndStatusOrderByCreatedAtAsc(
-                sellerId, CustomOrderStatus.PENDING);
+                sellerId, CustomOrderStatus.PENDING)
+                .stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<CustomOrderRequest> getAllRequestsForSeller(Long sellerId) {
-        return customOrderRequestRepository.findBySellerIdOrderByCreatedAtDesc(sellerId);
+    public List<CustomOrderResponseDto> getAllRequestsForSeller(Long sellerId) {
+        return customOrderRequestRepository.findBySellerIdOrderByCreatedAtDesc(sellerId)
+                .stream().map(this::toDto).toList();
     }
 
     private CustomOrderRequest findAndValidateSeller(Long requestId, Long sellerId) {
@@ -151,44 +212,26 @@ public class CustomOrderRequestService {
                         "Custom order request not found: " + requestId));
 
         if (!request.getSellerId().equals(sellerId)) {
-            throw new BadRequestException(
-                    "You are not authorised to respond to this request");
+            throw new BadRequestException("You are not authorised to respond to this request");
         }
 
         return request;
     }
 
-    @Transactional
-    public CustomOrderRequest submitAiGeneratedRequest(
-            Long customerId,
-            Long sellerId,
-            String designBrief,
-            String generatedImageUrl,
-            String occasion,
-            Integer serves,
-            BigDecimal budgetMin,
-            BigDecimal budgetMax) {
-
-        if (!userService.isActiveSeller(sellerId)) {
-            throw new BadRequestException("Selected seller is not a valid active seller");
-        }
-
-        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
-                customerId, sellerId, CustomOrderStatus.PENDING)) {
-            throw new BadRequestException(
-                    "You already have a pending request with this seller");
-        }
-
-        CustomOrderRequest request = new CustomOrderRequest();
-        request.setCustomerId(customerId);
-        request.setSellerId(sellerId);
-        request.setDesignBrief(designBrief);
-        request.setGeneratedImageUrl(generatedImageUrl);
-        request.setOccasion(occasion);
-        request.setServes(serves);
-        request.setBudgetMin(budgetMin);
-        request.setBudgetMax(budgetMax);
-
-        return customOrderRequestRepository.save(request);
+    private CustomOrderResponseDto toDto(CustomOrderRequest r) {
+        return CustomOrderResponseDto.builder()
+                .id(r.getId())
+                .customerId(r.getCustomerId())
+                .sellerId(r.getSellerId())
+                .designBrief(r.getDesignBrief())
+                .generatedImageUrl(r.getGeneratedImageUrl())
+                .occasion(r.getOccasion())
+                .serves(r.getServes())
+                .budgetMin(r.getBudgetMin())
+                .budgetMax(r.getBudgetMax())
+                .status(r.getStatus())
+                .sellerQuote(r.getSellerQuote())
+                .createdAt(r.getCreatedAt())
+                .build();
     }
 }

@@ -40,6 +40,7 @@ const router = createBrowserRouter([
           { path: '/cart', element: <CartPage /> },
           { path: '/checkout', element: <CheckoutPage /> },
           { path: '/orders', element: <MyOrdersPage /> },
+          { path: '/orders/:id', element: <OrderDetailPage /> },
           { path: '/custom-orders', element: <CustomOrdersPage /> },
           { path: '/design', element: <CakeDesignPage /> }
         ]
@@ -47,7 +48,6 @@ const router = createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
-          { path: '/orders/:id', element: <OrderDetailPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/favourites', element: <FavouritesPage /> },
           { path: '/notifications', element: <NotificationsPage /> },

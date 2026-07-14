@@ -8,7 +8,7 @@ import com.bakeaura.enums.PaymentStatus;
 import com.bakeaura.notification.EmailService;
 import com.bakeaura.notification.SmsService;
 import com.bakeaura.notification.NotificationService;
-import com.bakeaura.payment.PaymentRepository;
+import com.bakeaura.payment.PaymentCapturedEvent;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
@@ -22,6 +22,7 @@ import com.bakeaura.websocket.OrderTrackingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -50,13 +51,16 @@ public class OrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final EmailService emailService;
     private final SmsService smsService;
-    private final PaymentRepository paymentRepository;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, Long customerId) {
 
         User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+
+        if (!Boolean.TRUE.equals(customer.getIsEmailVerified())) {
+            throw new BadRequestException("Please verify your email address before placing orders");
+        }
 
         User seller = userRepository.findById(request.getSellerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Seller not found"));
@@ -93,6 +97,10 @@ public class OrderService {
                 .scheduledDeliveryDate(request.getScheduledDeliveryDate())
                 .referralCode(request.getReferralCode())
                 .build();
+
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BadRequestException("Order must contain at least one item");
+        }
 
         BigDecimal total = BigDecimal.ZERO;
 
@@ -225,6 +233,16 @@ public class OrderService {
             throw new AccessDeniedException("You are not authorised to update this order");
         }
 
+        // Sellers cannot cancel PENDING orders — the customer may be mid-payment.
+        // Only the customer (via cancelOrder) can cancel at PENDING stage.
+        if (isSeller && !isAdmin
+                && order.getStatus() == OrderStatus.PENDING
+                && newStatus == OrderStatus.CANCELLED) {
+            throw new BadRequestException(
+                    "Cannot cancel a pending order — the customer may be completing payment. " +
+                    "Wait for the order to be confirmed before cancelling.");
+        }
+
         validateTransition(order.getStatus(), newStatus);
         order.setStatus(newStatus);
 
@@ -251,6 +269,11 @@ public class OrderService {
                 "Order #" + orderId + " is now " + newStatus.toString().toLowerCase().replace("_", " "),
                 orderId
         );
+
+        // Fire refund check after the order is saved so PaymentService sees the CANCELLED state.
+        if (newStatus == OrderStatus.CANCELLED) {
+            eventPublisher.publishEvent(new OrderCancelledEvent(this, updated));
+        }
 
         return toResponse(updated);
     }
@@ -288,7 +311,7 @@ public class OrderService {
         boolean isAdmin = user.getRole().equals(Role.ADMIN);
 
         if (!isCustomer && !isSeller && !isAdmin) {
-            throw new AccessDeniedException("Access denied");
+            throw new ResourceNotFoundException("Order not found");
         }
 
         return toResponse(order);
@@ -318,16 +341,72 @@ public class OrderService {
                 "Order #" + orderId + " was cancelled by the customer.",
                 orderId
         );
+        eventPublisher.publishEvent(new OrderCancelledEvent(this, updated));
         return toResponse(updated);
     }
 
     public long countOrders() {
-        return orderRepository.count();
+        return orderRepository.countByStatusNot(OrderStatus.CANCELLED);
     }
 
     public List<Order> getOrdersBySellerForAnalytics(Long sellerId) {
         return orderRepository.findBySeller_IdOrderByCreatedAtDesc(sellerId);
     }
+
+    // ── Methods exposed for PaymentService (boundary-safe delegation) ─────────
+
+    public Order getOrderEntityById(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+    }
+
+    public Order findOrderByRazorpayOrderId(String razorpayOrderId) {
+        return orderRepository.findByRazorpayOrderId(razorpayOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Order not found for razorpay_order_id: " + razorpayOrderId));
+    }
+
+    @Transactional
+    public void setRazorpayOrderId(Order order, String razorpayOrderId) {
+        order.setRazorpayOrderId(razorpayOrderId);
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        orderRepository.save(order);
+    }
+
+    @Transactional
+    public void updatePaymentStatus(Order order, PaymentStatus paymentStatus) {
+        order.setPaymentStatus(paymentStatus);
+        orderRepository.save(order);
+    }
+
+    @Transactional
+    public void markPaymentRefunded(Order order) {
+        order.setPaymentStatus(PaymentStatus.REFUNDED);
+        orderRepository.save(order);
+    }
+
+    @Transactional
+    public void markOrderCancelledByPaymentFailure(Order order) {
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setPaymentStatus(PaymentStatus.FAILED);
+        orderRepository.save(order);
+        orderTrackingService.broadcastStatusUpdate(order.getId(), OrderStatus.CANCELLED);
+        notificationService.notifyUser(
+                order.getSeller().getId(),
+                "ORDER_CANCELLED",
+                "Order #" + order.getId() + " was automatically cancelled due to payment failure.",
+                order.getId()
+        );
+    }
+
+    @EventListener
+    public void handlePaymentCapture(PaymentCapturedEvent event) {
+        Order order = event.getOrder();
+        order.setPaymentStatus(PaymentStatus.CAPTURED);
+        confirmOrderAfterPayment(order);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     private CreateOrderRequestDto.OrderItemRequest toOrderItemRequest(CartItemDto cartItem) {
         CreateOrderRequestDto.OrderItemRequest item = new CreateOrderRequestDto.OrderItemRequest();
@@ -398,9 +477,7 @@ public class OrderService {
                         .build())
                 .collect(Collectors.toList());
 
-        PaymentStatus paymentStatus = paymentRepository.findByOrder_Id(order.getId())
-                .map(p -> p.getStatus())
-                .orElse(null);
+        PaymentStatus paymentStatus = order.getPaymentStatus();
 
         return OrderResponseDto.builder()
                 .id(order.getId())

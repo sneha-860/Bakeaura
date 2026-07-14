@@ -18,7 +18,7 @@ public class ProductCreateDto {
     private String description;
 
     @NotNull
-    @DecimalMin("0.0")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Price must be greater than zero")
     private BigDecimal price;
 
     @Min(0)
@@ -29,4 +29,9 @@ public class ProductCreateDto {
 
     @Size(max = 1000)
     private String imageUrl;
+
+    private Boolean isPreOrderOnly;
+
+    @Min(value = 0, message = "Minimum advance days cannot be negative")
+    private Integer minAdvanceDays;
 }

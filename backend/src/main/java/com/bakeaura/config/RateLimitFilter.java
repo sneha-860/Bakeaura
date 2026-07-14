@@ -20,13 +20,22 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private final Map<String, Bucket> loginBuckets = new ConcurrentHashMap<>();
+    // Per-IP bucket maps. MAX_ENTRIES prevents unbounded growth under heavy unique-IP traffic.
+    // When the cap is hit the map is cleared — all IPs start fresh. Blunt but safe for a
+    // single-instance deployment; swap for Redis-backed Bucket4j before multi-instance scale-out.
+    private static final int MAX_ENTRIES_PER_MAP = 50_000;
+
+    private final Map<String, Bucket> loginBuckets    = new ConcurrentHashMap<>();
     private final Map<String, Bucket> registerBuckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> paymentBuckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> resendBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> paymentBuckets  = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> resendBuckets   = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> aiBuckets       = new ConcurrentHashMap<>();
 
     private Bucket resolveBucket(Map<String, Bucket> buckets,
                                  String ip, long capacity, long minutes) {
+        if (buckets.size() > MAX_ENTRIES_PER_MAP) {
+            buckets.clear();
+        }
         return buckets.computeIfAbsent(ip, k ->
                 Bucket.builder()
                         .addLimit(Bandwidth.builder()
@@ -43,8 +52,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String ip = extractIp(request);
-        String path = request.getRequestURI();
+        String ip     = extractIp(request);
+        String path   = request.getRequestURI();
         String method = request.getMethod();
 
         Bucket bucket = null;
@@ -61,6 +70,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         } else if (method.equals("POST") && path.equals("/api/auth/resend-verification")) {
             bucket = resolveBucket(resendBuckets, ip, 3, 15);
 
+        } else if (method.equals("POST") && path.startsWith("/api/ai")) {
+            // AI Cake Design: 3 requests per 10 minutes per IP — Gemini calls are costly
+            bucket = resolveBucket(aiBuckets, ip, 3, 10);
         }
 
         if (bucket != null) {

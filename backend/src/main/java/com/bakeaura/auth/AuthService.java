@@ -58,6 +58,7 @@ public class AuthService {
         refreshTokenStore.store(savedUser.getId(), refreshToken);
 
         return new AuthResponse(
+                savedUser.getId(),
                 accessToken,
                 refreshToken,
                 "Bearer",
@@ -91,6 +92,7 @@ public class AuthService {
         refreshTokenStore.store(user.getId(), refreshToken);
 
         return new AuthResponse(
+                user.getId(),
                 accessToken,
                 refreshToken,
                 "Bearer",
@@ -131,6 +133,7 @@ public class AuthService {
         refreshTokenStore.store(user.getId(), newRefreshToken);
 
         return new AuthResponse(
+                user.getId(),
                 accessToken,
                 newRefreshToken,
                 "Bearer",

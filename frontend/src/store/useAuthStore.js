@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 export const useAuthStore = create(
     persist(
         (set) => ({
+            id: null,
             accessToken: null,
             refreshToken: null,
             email: null,
@@ -14,6 +15,7 @@ export const useAuthStore = create(
             cartCount: 0,
             setAuth: (authData) =>
                 set({
+                    id: authData?.id ?? null,
                     accessToken: authData?.accessToken ?? null,
                     refreshToken: authData?.refreshToken ?? null,
                     email: authData?.email ?? null,
@@ -24,6 +26,7 @@ export const useAuthStore = create(
                 }),
             logout: () =>
                 set({
+                    id: null,
                     accessToken: null,
                     refreshToken: null,
                     email: null,
@@ -40,6 +43,7 @@ export const useAuthStore = create(
         {
             name: 'bakeaura-auth',
             partialize: (state) => ({
+                id: state.id,
                 accessToken: state.accessToken,
                 refreshToken: state.refreshToken,
                 email: state.email,

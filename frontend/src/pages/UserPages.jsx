@@ -339,13 +339,61 @@ export function AddressesPage() {
 
 export function FavouritesPage() {
   const [products, setProducts] = useState([]);
-  const load = () => favouritesApi.list().then(setProducts).catch(() => setProducts([]));
+  const [sellers, setSellers] = useState([]);
+
+  function load() {
+    favouritesApi.list().then(setProducts).catch(() => setProducts([]));
+    favouritesApi.listSellers().then(setSellers).catch(() => setSellers([]));
+  }
   useEffect(() => { load(); }, []);
-  async function remove(product) {
+
+  async function removeProduct(product) {
     await favouritesApi.remove(product.id);
     load();
   }
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow"><Heart size={16} /> Saved</p><h1>Your favourites</h1></section>{products.length ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} onFavourite={remove} />)}</div> : <EmptyState title="No favourites yet" />}</div>;
+  async function removeSeller(seller) {
+    await favouritesApi.removeSeller(seller.id);
+    load();
+  }
+
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero">
+        <p className="eyebrow"><Heart size={16} /> Saved</p>
+        <h1>Your favourites</h1>
+      </section>
+
+      <h2 style={{ marginBottom: 12 }}>Favourite products</h2>
+      {products.length
+        ? <div className="grid product-grid">{products.map((product) => <ProductCard key={product.id} product={product} onFavourite={removeProduct} />)}</div>
+        : <EmptyState title="No favourite products yet" />
+      }
+
+      <h2 style={{ margin: '32px 0 12px' }}>Favourite bakers</h2>
+      {sellers.length ? (
+        <div className="stack">
+          {sellers.map((seller) => (
+            <div key={seller.id} className="panel" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {seller.bannerImageUrl && (
+                <img src={seller.bannerImageUrl} alt={seller.shopName || seller.name} style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1 }}>
+                <strong>{seller.shopName || seller.name}</strong>
+                {seller.shopBio && <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.85rem' }}>{seller.shopBio}</p>}
+                <span className={`pill ${seller.isOpen ? 'success' : ''}`} style={{ marginTop: 4, display: 'inline-block' }}>{seller.isOpen ? 'Open' : 'Closed'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <Link className="btn btn-ghost" style={{ fontSize: '0.82rem' }} to={`/sellers/${seller.id}`}>View shop</Link>
+                <Button variant="ghost" onClick={() => removeSeller(seller)}><Heart size={15} /></Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No favourite bakers yet" text="Heart a baker's storefront to save them here." />
+      )}
+    </div>
+  );
 }
 
 export function NotificationsPage() {

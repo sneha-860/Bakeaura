@@ -1,9 +1,8 @@
 package com.bakeaura.ai;
 
 import com.bakeaura.cloudinary.CloudinaryService;
-import com.bakeaura.customorder.CustomOrderRequest;
 import com.bakeaura.customorder.CustomOrderRequestService;
-import com.bakeaura.notification.NotificationService;
+import com.bakeaura.customorder.CustomOrderResponseDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,7 +19,6 @@ public class CakeDesignAssistantService {
     private final GeminiAiService geminiAiService;
     private final CloudinaryService cloudinaryService;
     private final CustomOrderRequestService customOrderRequestService;
-    private final NotificationService notificationService;
 
     public CakeDesignPreviewResponseDto generatePreview(
             String description, String occasion, Integer serves,
@@ -55,14 +53,15 @@ public class CakeDesignAssistantService {
         return new CakeDesignPreviewResponseDto(designBrief, imageBase64, imageResult.mimeType());
     }
 
-    public CustomOrderRequest confirmAndSubmit(Long customerId, ConfirmCustomOrderDto dto) {
+    public CustomOrderResponseDto confirmAndSubmit(Long customerId, ConfirmCustomOrderDto dto) {
         String imageUrl = null;
         if (dto.getImageBase64() != null && !dto.getImageBase64().isBlank()) {
             byte[] imageBytes = Base64.getDecoder().decode(dto.getImageBase64());
             imageUrl = uploadGeneratedImage(imageBytes);
         }
 
-        CustomOrderRequest result = customOrderRequestService.submitAiGeneratedRequest(
+        // submitAiGeneratedRequest now sends the seller notification internally
+        return customOrderRequestService.submitAiGeneratedRequest(
                 customerId,
                 dto.getSellerId(),
                 dto.getDesignBrief(),
@@ -71,15 +70,6 @@ public class CakeDesignAssistantService {
                 dto.getServes(),
                 dto.getBudgetMin(),
                 dto.getBudgetMax());
-
-        notificationService.notifyUser(
-                dto.getSellerId(),
-                "CUSTOM_ORDER_REQUEST",
-                "New AI-generated custom cake request waiting for your response.",
-                result.getId()
-        );
-
-        return result;
     }
 
     private String uploadGeneratedImage(byte[] imageBytes) {

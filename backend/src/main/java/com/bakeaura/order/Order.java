@@ -2,6 +2,7 @@ package com.bakeaura.order;
 
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.enums.OrderType;
+import com.bakeaura.enums.PaymentStatus;
 import jakarta.persistence.*;
 import com.bakeaura.user.User;
 import lombok.*;
@@ -78,6 +79,12 @@ public class Order {
     // Referral code string applied at checkout — stored for commission processing after payment capture
     @Column(nullable = true)
     private String referralCode;
+
+    // Denormalized from the payments table so OrderService.toResponse() can include payment
+    // status without a cross-module PaymentRepository injection.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status")
+    private PaymentStatus paymentStatus;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

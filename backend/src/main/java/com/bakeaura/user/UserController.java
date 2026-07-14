@@ -38,7 +38,7 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("Password changed", null));
     }
 
-    @PostMapping("/me/avatar")
+    @PatchMapping("/me/avatar")
     public ResponseEntity<ApiResponse<UserDto>> uploadAvatar(
             Authentication authentication,
             @RequestParam("file") MultipartFile file) throws IOException {

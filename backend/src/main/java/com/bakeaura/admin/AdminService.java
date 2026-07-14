@@ -1,5 +1,6 @@
 package com.bakeaura.admin;
 
+import com.bakeaura.auth.RefreshTokenStore;
 import com.bakeaura.category.CategoryService;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
@@ -15,10 +16,10 @@ import com.bakeaura.user.UserDto;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.user.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +33,7 @@ public class AdminService {
     private final SellerService sellerService;
     private final InfluencerProfileService influencerProfileService;
     private final ReferralCodeService referralCodeService;
+    private final RefreshTokenStore refreshTokenStore;
 
     public AdminDashboardDto dashboard() {
         return new AdminDashboardDto(
@@ -43,9 +45,11 @@ public class AdminService {
         );
     }
 
-    public List<UserDto> getUsers(Role role) {
-        List<User> users = role == null ? userRepository.findAll() : userRepository.findByRole(role);
-        return users.stream().map(userService::toDto).toList();
+    public Page<UserDto> getUsers(Role role, Pageable pageable) {
+        Page<User> users = role == null
+                ? userRepository.findAll(pageable)
+                : userRepository.findByRole(role, pageable);
+        return users.map(userService::toDto);
     }
 
     @Transactional
@@ -56,13 +60,24 @@ public class AdminService {
         User user = userRepository.findById(targetId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setIsActive(request.getActive());
-        return userService.toDto(userRepository.save(user));
+        userRepository.save(user);
+        // Revoke refresh token so the deactivated user cannot silently extend their session.
+        // Their current access token (≤15 min TTL) will still work until it expires — acceptable.
+        if (!Boolean.TRUE.equals(request.getActive())) {
+            refreshTokenStore.revoke(targetId);
+        }
+        return userService.toDto(user);
     }
 
     @Transactional
     public UserDto updateUserRole(Long adminId, Long targetId, Role role) {
         if (adminId.equals(targetId)) {
             throw new BadRequestException("Admins cannot change their own role");
+        }
+        // Prevent accidental or malicious ADMIN promotion through this endpoint.
+        // ADMIN accounts must be created directly in the database by a super-admin.
+        if (role == Role.ADMIN) {
+            throw new BadRequestException("Cannot promote users to ADMIN through this endpoint");
         }
         User user = userRepository.findById(targetId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -76,6 +91,9 @@ public class AdminService {
         } else if (role == Role.INFLUENCER && previousRole != Role.INFLUENCER) {
             influencerProfileService.createProfileForNewInfluencer(user);
             referralCodeService.generateAndSaveReferralCode(user);
+        } else if (previousRole == Role.SELLER && role != Role.SELLER) {
+            // Close the shop when demoting from SELLER so it disappears from public listings immediately.
+            sellerService.closeShopOnDemotion(targetId);
         }
 
         return userService.toDto(user);
@@ -85,14 +103,20 @@ public class AdminService {
         categoryService.evictCategoriesCache();
     }
 
+    // Deactivates the user rather than hard-deleting, preserving order history and referential
+    // integrity. The user is blocked from logging in immediately (login validates isActive).
     @Transactional
     public void deleteUser(Long adminId, Long targetId) {
         if (adminId.equals(targetId)) {
-            throw new BadRequestException("Admins cannot delete their own account");
+            throw new BadRequestException("Admins cannot deactivate their own account");
         }
-        if (!userRepository.existsById(targetId)) {
-            throw new ResourceNotFoundException("User not found");
+        User target = userRepository.findById(targetId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (target.getRole() == Role.ADMIN) {
+            throw new BadRequestException("Admin accounts cannot be deactivated through this action");
         }
-        userRepository.deleteById(targetId);
+        target.setIsActive(false);
+        userRepository.save(target);
+        refreshTokenStore.revoke(targetId);
     }
 }

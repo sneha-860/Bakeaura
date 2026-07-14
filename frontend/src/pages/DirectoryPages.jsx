@@ -100,7 +100,7 @@ export function SellerStorefrontPage() {
 
   async function submitCustomOrder(values) {
     try {
-      await customOrdersApi.submit({ sellerId: id, ...values });
+      await customOrdersApi.submit({ sellerId: Number(id), ...values });
       toast.success('Custom order request sent');
       reset();
       setCustomOrderOpen(false);

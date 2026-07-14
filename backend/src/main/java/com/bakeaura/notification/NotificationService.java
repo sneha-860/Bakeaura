@@ -50,7 +50,7 @@ public class NotificationService {
     // never block the payment response being returned to the client.
     @Async
     @Transactional
-    public NotificationDto notifyUser(Long userId, String type, String message, Long relatedId) {
+    public void notifyUser(Long userId, String type, String message, Long relatedId) {
         try {
             User user = getUser(userId);
             Notification notification = new Notification();
@@ -60,10 +60,8 @@ public class NotificationService {
             notification.setRelatedId(relatedId);
             NotificationDto dto = toDto(notificationRepository.save(notification));
             messagingTemplate.convertAndSend("/topic/users/" + user.getId() + "/notifications", dto);
-            return dto;
         } catch (Exception e) {
             log.error("Failed to deliver notification to user {}: {}", userId, e.getMessage());
-            return null;
         }
     }
 

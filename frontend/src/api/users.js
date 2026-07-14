@@ -5,5 +5,5 @@ export const usersApi = {
   updateMe: (body) => api.patch('/users/me', body).then(data),
   changePassword: (body) => api.patch('/users/me/password', body).then(data),
   requestEmailChange: (body) => api.post('/users/me/change-email', body).then(data),
-  uploadAvatar: (formData) => api.post('/users/me/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(data)
+  uploadAvatar: (formData) => api.patch('/users/me/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(data)
 };

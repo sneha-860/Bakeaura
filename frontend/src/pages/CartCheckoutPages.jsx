@@ -101,6 +101,7 @@ export function CheckoutPage() {
   const [scheduledDate, setScheduledDate] = useState('');
   const [hasPhone, setHasPhone] = useState(true);
   const [phoneInput, setPhoneInput] = useState('');
+  const [meLocation, setMeLocation] = useState({ latitude: null, longitude: null });
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [isPlacing, setIsPlacing] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
@@ -123,7 +124,10 @@ export function CheckoutPage() {
       setAddresses([]);
       setShowAddressForm(true);
     });
-    usersApi.me().then((me) => setHasPhone(Boolean(me?.phone))).catch(() => {});
+    usersApi.me().then((me) => {
+      setHasPhone(Boolean(me?.phone));
+      setMeLocation({ latitude: me?.latitude ?? null, longitude: me?.longitude ?? null });
+    }).catch(() => {});
   }, []);
 
   const sellerGroups = useMemo(() => {
@@ -176,6 +180,10 @@ export function CheckoutPage() {
   }
 
   async function addAddress(values) {
+    if (!addressCoords.latitude || !addressCoords.longitude) {
+      toast.error('Location is required — click "Use my current location" before saving');
+      return;
+    }
     try {
       const saved = await addressesApi.create({ ...values, ...addressCoords });
       setAddresses(await addressesApi.list());
@@ -205,6 +213,10 @@ export function CheckoutPage() {
       toast.error('Select a seller group and delivery address');
       return;
     }
+    if (!selectedAddress.latitude || !selectedAddress.longitude) {
+      toast.error('This address is missing location coordinates. Please add a new address using "Use my current location".');
+      return;
+    }
     if (orderType === OrderType.SCHEDULED && !scheduledDate) {
       toast.error('Select a delivery date for your scheduled order');
       return;
@@ -216,7 +228,12 @@ export function CheckoutPage() {
     setIsPlacing(true);
     try {
       if (!hasPhone && phoneInput.trim()) {
-        await usersApi.updateMe({ name: authName, phone: phoneInput.trim() });
+        await usersApi.updateMe({
+          name: authName,
+          phone: phoneInput.trim(),
+          latitude: meLocation.latitude,
+          longitude: meLocation.longitude,
+        });
       }
       const order = await ordersApi.createFromCart({
         sellerId: Number(selectedSeller),
@@ -245,7 +262,8 @@ export function CheckoutPage() {
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySignature: response.razorpay_signature
             });
-            setCartCount(0);
+            // Reload actual cart count — server cleared only this seller's items, other items remain
+            cartApi.get().then((c) => setCartCount(c?.items?.length || 0)).catch(() => setCartCount(0));
             toast.success('Payment confirmed! Your baker has received your order.');
             navigate(`/orders/${order.id}`);
           } catch (err) {
@@ -254,7 +272,11 @@ export function CheckoutPage() {
         },
         modal: {
           ondismiss: () => {
-            toast('Payment cancelled. Your order is saved — complete payment from My Orders.');
+            toast(
+              `Payment cancelled. Order #${order.id} is saved — go to My Orders to complete payment.`,
+              { duration: 6000 }
+            );
+            navigate(`/orders/${order.id}`);
           }
         }
       };
@@ -269,6 +291,16 @@ export function CheckoutPage() {
   if (!items.length) return <div className="page"><EmptyState title="Checkout needs cart items" /></div>;
 
   const today = new Date().toISOString().split('T')[0];
+  // Minimum advance days required by any item in the selected seller group.
+  const maxAdvanceDays = Math.max(
+    0,
+    ...(selectedGroup?.items?.map((i) => i.product?.minAdvanceDays || 0) || [0])
+  );
+  const minScheduledDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + maxAdvanceDays);
+    return d.toISOString().split('T')[0];
+  })();
 
   return (
     <div className="page two-column">
@@ -302,7 +334,12 @@ export function CheckoutPage() {
           </div>
           {orderType === OrderType.SCHEDULED && (
             <div style={{ marginTop: 12 }}>
-              <Input label="Delivery date" type="date" min={today} value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
+              <Input label="Delivery date" type="date" min={minScheduledDate} value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
+              {maxAdvanceDays > 0 && (
+                <p className="muted" style={{ fontSize: '0.82rem', marginTop: 4 }}>
+                  Requires at least {maxAdvanceDays} day{maxAdvanceDays !== 1 ? 's' : ''} advance notice
+                </p>
+              )}
             </div>
           )}
         </div>

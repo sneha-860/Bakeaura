@@ -14,7 +14,7 @@ public class RoleApplicationRequest {
     private String phone;
 
     @NotBlank(message = "Please describe your experience — admins read this to decide your application")
-    @Size(min = 30, max = 1000, message = "Message must be at least 30 characters")
+    @Size(min = 30, max = 2000, message = "Message must be at least 30 characters")
     private String message;
 
     // Required for INFLUENCER applications — validated in service

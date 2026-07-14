@@ -14,8 +14,8 @@ public class SellerProfileDto {
     // Fields from User
     private Long id;
     private String name;
-    private Double latitude;
-    private Double longitude;
+    // Exact coordinates deliberately excluded — home bakers' precise location is private.
+    // Server-side Haversine calculations use coordinates directly from the User entity.
 
     // Fields from SellerProfile
     private String shopName;

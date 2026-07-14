@@ -1,6 +1,7 @@
 package com.bakeaura.seller;
 
 import com.bakeaura.common.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,7 +40,7 @@ public class SellerController {
     @PreAuthorize("hasRole('SELLER')")
     public ResponseEntity<ApiResponse<SellerProfileDto>> updateProfile(
             Authentication authentication,
-            @RequestBody UpdateSellerProfileDto request) {
+            @Valid @RequestBody UpdateSellerProfileDto request) {
         Long userId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Profile updated",
                 sellerService.updateProfile(userId, request)));

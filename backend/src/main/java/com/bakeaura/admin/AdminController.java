@@ -9,6 +9,9 @@ import com.bakeaura.roleapplication.RoleApplicationService;
 import com.bakeaura.user.UserDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -39,8 +42,12 @@ public class AdminController {
     }
 
     @GetMapping("/users")
-    public ResponseEntity<ApiResponse<List<UserDto>>> getUsers(@RequestParam(required = false) Role role) {
-        return ResponseEntity.ok(ApiResponse.ok("Users fetched", adminService.getUsers(role)));
+    public ResponseEntity<ApiResponse<Page<UserDto>>> getUsers(
+            @RequestParam(required = false) Role role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        PageRequest pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        return ResponseEntity.ok(ApiResponse.ok("Users fetched", adminService.getUsers(role, pageable)));
     }
 
     @PatchMapping("/users/{id}/status")

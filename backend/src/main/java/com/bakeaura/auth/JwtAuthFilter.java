@@ -1,6 +1,7 @@
 package com.bakeaura.auth;
 
 import com.bakeaura.enums.Role;
+import com.bakeaura.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -33,14 +35,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (jwtUtil.isTokenValid(token)
                     && jwtUtil.isAccessToken(token) && SecurityContextHolder.getContext().getAuthentication() == null){
                 Long userId = jwtUtil.extractUserId(token);
-                Role role = jwtUtil.extractRole(token);
-                List<SimpleGrantedAuthority> authorities = role == null
-                        ? List.of()
-                        : List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userId, null, authorities);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                userRepository.findById(userId).ifPresent(user -> {
+                    if (!Boolean.TRUE.equals(user.getIsActive())) return;
+
+                    // Role is always read from DB, not from the JWT claim.
+                    // This ensures that an admin role-change takes effect on the very next request
+                    // without waiting for the access token to expire.
+                    Role role = user.getRole();
+                    List<SimpleGrantedAuthority> authorities = role == null
+                            ? List.of()
+                            : List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(userId, null, authorities);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                });
             }
         }
 

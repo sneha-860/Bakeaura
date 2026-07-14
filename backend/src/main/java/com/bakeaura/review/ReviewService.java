@@ -4,7 +4,7 @@ import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.order.Order;
-import com.bakeaura.order.OrderRepository;
+import com.bakeaura.order.OrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import java.util.List;
 public class ReviewService {
 
     private final ReviewRepository reviewRepository;
-    private final OrderRepository orderRepository;
+    private final OrderService orderService;
     private final UserRepository userRepository;
 
     public List<ReviewDto> getSellerReviews(Long sellerId) {
@@ -47,8 +47,7 @@ public class ReviewService {
         User customer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        Order order = orderService.getOrderEntityById(orderId);
 
         if (!order.getCustomer().getId().equals(customer.getId())) {
             throw new BadRequestException("You can only review your own orders");
@@ -78,8 +77,7 @@ public class ReviewService {
         User customer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+        Order order = orderService.getOrderEntityById(orderId);
 
         Review review = reviewRepository.findByCustomerAndOrder(customer, order)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found"));

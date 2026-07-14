@@ -1,5 +1,7 @@
 package com.bakeaura.user;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +17,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRoleAndIsActiveTrue(com.bakeaura.enums.Role role);
 
     List<User> findByRole(com.bakeaura.enums.Role role);
+
+    Page<User> findAll(Pageable pageable);
+
+    Page<User> findByRole(com.bakeaura.enums.Role role, Pageable pageable);
 
     Optional<User> findByEmailVerificationToken(String token);
 

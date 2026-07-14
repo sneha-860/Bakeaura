@@ -5,7 +5,11 @@ import com.bakeaura.category.Category;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
-import com.bakeaura.seller.SellerProfileRepository;
+import com.bakeaura.order.OrderItemRepository;
+// CategoryRepository and OrderItemRepository are injected directly (cross-module) because
+// the dependency graph prevents clean delegation: CategoryService → ProductService and
+// OrderService → ProductService both create circular deps if reversed.
+// These are narrow, read-only FK lookups — no business logic from those modules is invoked.
 import org.springframework.security.access.AccessDeniedException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
@@ -18,7 +22,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,9 +30,9 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
-    private final SellerProfileRepository sellerProfileRepository;
+    private final OrderItemRepository orderItemRepository;
 
-    @CacheEvict(value = "products", allEntries = true)
+    @CacheEvict(value = {"products", "sellerList"}, allEntries = true)
     public ProductDto createProduct(ProductCreateDto dto, Long userId) {
         User seller = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -41,6 +44,12 @@ public class ProductService {
         Category category = categoryRepository.findById(dto.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
+        if (Boolean.TRUE.equals(dto.getIsPreOrderOnly()) &&
+                (dto.getMinAdvanceDays() == null || dto.getMinAdvanceDays() < 1)) {
+            throw new BadRequestException(
+                    "Pre-order-only products must specify a minimum advance booking of at least 1 day");
+        }
+
         Product product = new Product();
         product.setName(dto.getName());
         product.setDescription(dto.getDescription());
@@ -50,6 +59,8 @@ public class ProductService {
         product.setCategory(category);
         product.setImageUrl(dto.getImageUrl());
         product.setIsAvailable(true);
+        product.setIsPreOrderOnly(Boolean.TRUE.equals(dto.getIsPreOrderOnly()));
+        product.setMinAdvanceDays(dto.getMinAdvanceDays());
 
         return toDto(productRepository.save(product));
     }
@@ -62,8 +73,10 @@ public class ProductService {
     }
 
     @Cacheable(value = "products", key = "#id")
-    public Optional<ProductDto> getProductById(Long id) {
-        return productRepository.findById(id).map(this::toDto);
+    public ProductDto getProductById(Long id) {
+        return productRepository.findById(id)
+                .map(this::toDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
     }
 
     public Product getProductEntityById(Long id) {
@@ -82,7 +95,7 @@ public class ProductService {
                 .toList();
     }
 
-    @CacheEvict(value = "products", allEntries = true)
+    @CacheEvict(value = {"products", "sellerList"}, allEntries = true)
     public ProductDto updateProduct(Long id, ProductCreateDto dto, Long userId) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
@@ -97,17 +110,25 @@ public class ProductService {
         Category category = categoryRepository.findById(dto.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
 
+        if (Boolean.TRUE.equals(dto.getIsPreOrderOnly()) &&
+                (dto.getMinAdvanceDays() == null || dto.getMinAdvanceDays() < 1)) {
+            throw new BadRequestException(
+                    "Pre-order-only products must specify a minimum advance booking of at least 1 day");
+        }
+
         product.setName(dto.getName());
         product.setDescription(dto.getDescription());
         product.setPrice(dto.getPrice());
         product.setStockQuantity(dto.getStockQuantity());
         product.setCategory(category);
         product.setImageUrl(dto.getImageUrl());
+        product.setIsPreOrderOnly(Boolean.TRUE.equals(dto.getIsPreOrderOnly()));
+        product.setMinAdvanceDays(dto.getMinAdvanceDays());
 
         return toDto(productRepository.save(product));
     }
 
-    @CacheEvict(value = "products", allEntries = true)
+    @CacheEvict(value = {"products", "sellerList"}, allEntries = true)
     public void deleteProduct(Long id, Long userId) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
@@ -117,6 +138,12 @@ public class ProductService {
 
         if (!product.getSeller().getId().equals(seller.getId())) {
             throw new AccessDeniedException("You can delete only your own products");
+        }
+
+        if (orderItemRepository.existsByProduct_Id(id)) {
+            throw new BadRequestException(
+                    "This product has order history and cannot be deleted. " +
+                    "Use 'Toggle availability' to hide it from customers instead.");
         }
 
         productRepository.delete(product);
@@ -181,7 +208,7 @@ public class ProductService {
         return productRepository.existsByCategoryId(categoryId);
     }
 
-    @CacheEvict(value = "products", allEntries = true)
+    @CacheEvict(value = {"products", "sellerList"}, allEntries = true)
     public ProductDto toggleAvailability(Long productId, Long userId) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
@@ -200,12 +227,7 @@ public class ProductService {
     public ProductDto toDto(Product product) {
         User seller = product.getSeller();
         Category category = product.getCategory();
-        String displayName = null;
-        if (seller != null) {
-            displayName = sellerProfileRepository.findByUserId(seller.getId())
-                    .map(p -> p.getShopName() != null && !p.getShopName().isBlank() ? p.getShopName() : seller.getName())
-                    .orElse(seller.getName());
-        }
+        String displayName = seller != null ? seller.getName() : null;
         return new ProductDto(
                 product.getId(),
                 product.getName(),

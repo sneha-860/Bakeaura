@@ -1,5 +1,6 @@
 package com.bakeaura.user;
 
+import com.bakeaura.auth.RefreshTokenStore;
 import com.bakeaura.cloudinary.CloudinaryService;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
@@ -21,6 +22,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final CloudinaryService cloudinaryService;
+    private final RefreshTokenStore refreshTokenStore;
 
     public UserDto getMe(Long userId) {
         return toDto(getById(userId));
@@ -94,9 +96,10 @@ public class UserService {
         user.setPendingEmailToken(null);
         user.setPendingEmailTokenExpiry(null);
         userRepository.save(user);
+        refreshTokenStore.revoke(user.getId());
     }
 
-    User getById(Long userId) {
+    public User getById(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }

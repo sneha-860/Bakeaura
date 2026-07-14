@@ -54,9 +54,14 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/sellers/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/sellers", "/api/sellers/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/influencers/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reels/**").permitAll()
+
+                        // Defense-in-depth for admin surface — independent of @EnableMethodSecurity.
+                        // @PreAuthorize on AdminController is the primary guard; this is the fallback.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // Everything else needs a valid JWT token
                         .anyRequest().authenticated()

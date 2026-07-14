@@ -66,13 +66,11 @@ public class RoleApplicationService {
             }
         }
 
-        user.setPhone(request.getPhone().trim());
-        userRepository.save(user);
-
         RoleApplication application = new RoleApplication();
         application.setUser(user);
         application.setRequestedRole(requestedRole);
         application.setStatus(ApplicationStatus.PENDING);
+        application.setPhone(request.getPhone() != null ? request.getPhone().trim() : null);
         application.setMessage(request.getMessage());
         application.setSocialUrl(request.getSocialUrl());
         application.setFollowerCount(request.getFollowerCount());
@@ -126,14 +124,15 @@ public class RoleApplicationService {
             throw new BadRequestException("Cannot approve an inactive user");
         }
 
-        String adminEmail = userRepository.findById(adminId)
-                .map(User::getEmail)
-                .orElse("admin#" + adminId);
-
         user.setRole(application.getRequestedRole());
+        if (application.getPhone() != null) {
+            user.setPhone(application.getPhone());
+        }
         application.setStatus(ApplicationStatus.APPROVED);
         application.setReviewNote(request.getReviewNote());
-        application.setReviewedBy(adminEmail);
+        // Store the admin's numeric user ID so the audit record remains valid even if
+        // the admin later changes their email address.
+        application.setReviewedBy(String.valueOf(adminId));
         application.setReviewedAt(LocalDateTime.now());
 
         userRepository.save(user);
@@ -162,13 +161,9 @@ public class RoleApplicationService {
     public RoleApplicationResponse reject(Long applicationId, Long adminId, RoleApplicationReviewRequest request) {
         RoleApplication application = getPendingApplication(applicationId);
 
-        String adminEmail = userRepository.findById(adminId)
-                .map(User::getEmail)
-                .orElse("admin#" + adminId);
-
         application.setStatus(ApplicationStatus.REJECTED);
         application.setReviewNote(request.getReviewNote());
-        application.setReviewedBy(adminEmail);
+        application.setReviewedBy(String.valueOf(adminId));
         application.setReviewedAt(LocalDateTime.now());
 
         RoleApplicationResponse response = toResponse(roleApplicationRepository.save(application));
@@ -215,7 +210,7 @@ public class RoleApplicationService {
                 user.getId(),
                 user.getEmail(),
                 user.getName(),
-                user.getPhone(),
+                application.getPhone(),
                 user.getRole(),
                 application.getRequestedRole(),
                 application.getStatus(),

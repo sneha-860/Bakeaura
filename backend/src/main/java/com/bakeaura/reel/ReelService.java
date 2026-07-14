@@ -115,6 +115,10 @@ public class ReelService {
         reelRepository.incrementSaveCount(reelId);
     }
 
+    public List<Reel> getAllActiveReels() {
+        return reelRepository.findAllActive();
+    }
+
     public List<ReelResponseDTO> getSellerReels(Long sellerId) {
         return reelRepository
                 .findBySeller_IdAndStatusOrderByCreatedAtDesc(sellerId, Reel.ReelStatus.ACTIVE)
