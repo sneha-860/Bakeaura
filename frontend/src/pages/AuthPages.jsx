@@ -1,4 +1,4 @@
-import { CheckCircle2, Eye, EyeOff, Store, UserPlus, WandSparkles, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Store, UserPlus, WandSparkles, XCircle, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -59,6 +59,7 @@ export function LoginPage() {
           <button type="button" onClick={() => setShow((value) => !value)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff /> : <Eye />}</button>
         </div>
         <Button loading={loading}>Login</Button>
+        <p className="muted center"><Link to="/forgot-password">Forgot your password?</Link></p>
         <p className="muted center">New to Bakeaura? <Link to="/register">Create an account</Link></p>
       </form>
     </AuthShell>
@@ -313,6 +314,115 @@ export function VerifyEmailChangePage() {
       successLabel="Go to login"
       onSuccess={logout}
     />
+  );
+}
+
+export function ForgotPasswordPage() {
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(z.object({ email: z.string().email() }))
+  });
+
+  async function submit(values) {
+    setLoading(true);
+    try {
+      await authApi.forgotPassword(values.email);
+      setSubmittedEmail(values.email);
+      setSent(true);
+    } catch {
+      // Always show success — never reveal whether the email exists.
+      setSubmittedEmail(values.email);
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <AuthShell title="Check your inbox" subtitle="A reset link is on its way.">
+        <div className="form-card center">
+          <Mail size={40} color="var(--sienna)" />
+          <p>If <strong>{submittedEmail}</strong> is registered, we sent a password reset link. Check your inbox and spam folder.</p>
+          <p className="muted" style={{ fontSize: '0.88rem' }}>The link expires in 1 hour.</p>
+          <Link className="btn btn-ghost" to="/login">Back to login</Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell title="Forgot your password?" subtitle="Enter your email and we'll send a reset link.">
+      <form className="form-card" onSubmit={handleSubmit(submit)}>
+        <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
+        <Button loading={loading}>Send reset link</Button>
+        <p className="muted center"><Link to="/login">Back to login</Link></p>
+      </form>
+    </AuthShell>
+  );
+}
+
+export function ResetPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+  const token = searchParams.get('token');
+
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(
+      z.object({
+        newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+        confirmPassword: z.string().min(8)
+      }).refine((v) => v.newPassword === v.confirmPassword, {
+        message: 'Passwords must match',
+        path: ['confirmPassword']
+      })
+    )
+  });
+
+  if (!token) {
+    return (
+      <VerifyShell>
+        <div className="verify-state">
+          <div className="verify-icon-wrap verify-icon-error"><XCircle size={36} /></div>
+          <h2>Invalid reset link</h2>
+          <p>This reset link is missing a token. Please request a new one.</p>
+          <Link className="btn btn-primary" to="/forgot-password" style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}>
+            Request new link
+          </Link>
+        </div>
+      </VerifyShell>
+    );
+  }
+
+  async function submit(values) {
+    setLoading(true);
+    try {
+      await authApi.resetPassword(token, values.newPassword);
+      toast.success('Password reset! Please log in with your new password.');
+      navigate('/login');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'This reset link is invalid or has expired.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthShell title="Set a new password" subtitle="Choose a strong password for your Bakeaura account.">
+      <form className="form-card" onSubmit={handleSubmit(submit)}>
+        <div className="password-row">
+          <Input label="New password" type={show ? 'text' : 'password'} error={errors.newPassword?.message} {...register('newPassword')} />
+          <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <EyeOff /> : <Eye />}</button>
+        </div>
+        <Input label="Confirm new password" type={show ? 'text' : 'password'} error={errors.confirmPassword?.message} {...register('confirmPassword')} />
+        <Button loading={loading}>Reset password</Button>
+        <p className="muted center"><Link to="/login">Back to login</Link></p>
+      </form>
+    </AuthShell>
   );
 }
 

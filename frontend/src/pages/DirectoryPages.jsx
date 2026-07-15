@@ -36,45 +36,50 @@ const customOrderSchema = z.object({
 
 export function SellersPage() {
   const [sellers, setSellers] = useState([]);
-  useEffect(() => { sellersApi.list().then(setSellers).catch(() => setSellers([])); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    sellersApi.list().then(setSellers).catch(() => setSellers([])).finally(() => setLoading(false));
+  }, []);
   return (
     <div className="page">
       <section className="page-hero compact-hero">
         <p className="eyebrow"><MapPin size={16} /> Sellers</p>
         <h1>Local bakers</h1>
       </section>
-      <div className="sellers-grid">
-        {sellers.map((seller) => (
-          <Link className="seller-card" key={seller.id} to={`/sellers/${seller.id}`}>
-            <div className="seller-card-banner">
-              {seller.bannerImageUrl
-                ? <img src={seller.bannerImageUrl} alt={seller.shopName || seller.name} />
-                : <div className="seller-card-banner-placeholder" />}
-              {seller.isOpen != null
-                ? <span className={`pill seller-card-status${seller.isOpen ? ' success' : ''}`}>{seller.isOpen ? 'Open' : 'Closed'}</span>
-                : null}
-            </div>
-            <div className="seller-card-body">
-              <div className="seller-card-top">
-                <span className="avatar">{(seller.shopName || seller.name)?.charAt(0)}</span>
-                <div className="seller-card-names">
-                  <strong>{seller.shopName || seller.name}</strong>
-                  {seller.shopName ? <small>{seller.name}</small> : null}
+      {loading ? <div className="loading-state">Loading bakers…</div> : (
+        <div className="sellers-grid">
+          {sellers.map((seller) => (
+            <Link className="seller-card" key={seller.id} to={`/sellers/${seller.id}`}>
+              <div className="seller-card-banner">
+                {seller.bannerImageUrl
+                  ? <img src={seller.bannerImageUrl} alt={seller.shopName || seller.name} />
+                  : <div className="seller-card-banner-placeholder" />}
+                {seller.isOpen != null
+                  ? <span className={`pill seller-card-status${seller.isOpen ? ' success' : ''}`}>{seller.isOpen ? 'Open' : 'Closed'}</span>
+                  : null}
+              </div>
+              <div className="seller-card-body">
+                <div className="seller-card-top">
+                  <span className="avatar">{(seller.shopName || seller.name)?.charAt(0)}</span>
+                  <div className="seller-card-names">
+                    <strong>{seller.shopName || seller.name}</strong>
+                    {seller.shopName ? <small>{seller.name}</small> : null}
+                  </div>
+                </div>
+                {seller.shopBio ? <p className="seller-card-bio">{seller.shopBio}</p> : null}
+                {seller.averageRating > 0 ? (
+                  <div className="seller-card-rating"><Star size={12} /><span>{seller.averageRating.toFixed(1)}</span></div>
+                ) : null}
+                <div className="seller-card-tags">
+                  <span className="pill">{seller.productCount || 0} products</span>
+                  {seller.deliveryRadiusKm ? <span className="pill">{seller.deliveryRadiusKm} km radius</span> : null}
                 </div>
               </div>
-              {seller.shopBio ? <p className="seller-card-bio">{seller.shopBio}</p> : null}
-              {seller.averageRating > 0 ? (
-                <div className="seller-card-rating"><Star size={12} /><span>{seller.averageRating.toFixed(1)}</span></div>
-              ) : null}
-              <div className="seller-card-tags">
-                <span className="pill">{seller.productCount || 0} products</span>
-                {seller.deliveryRadiusKm ? <span className="pill">{seller.deliveryRadiusKm} km radius</span> : null}
-              </div>
-            </div>
-          </Link>
-        ))}
-        {!sellers.length ? <EmptyState title="No sellers found" /> : null}
-      </div>
+            </Link>
+          ))}
+          {!sellers.length ? <EmptyState title="No sellers found" /> : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -153,8 +158,48 @@ export function SellerStorefrontPage() {
 
 export function InfluencersPage() {
   const [influencers, setInfluencers] = useState([]);
-  useEffect(() => { influencersApi.list().then(setInfluencers).catch(() => setInfluencers([])); }, []);
-  return <Directory title="Creator discovery" eyebrow="Influencers" icon={<UsersRound size={16} />}>{influencers.map((creator) => <Link className="person-card" key={creator.id} to={`/influencers/${creator.id}`}><span className="avatar">{creator.name?.charAt(0)}</span><strong>{creator.name}</strong><small>{creator.niche ? titleCase(creator.niche) : creator.email}{creator.followerCount ? ` · ${creator.followerCount.toLocaleString()} followers` : ''}</small></Link>)}</Directory>;
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    influencersApi.list().then(setInfluencers).catch(() => setInfluencers([])).finally(() => setLoading(false));
+  }, []);
+  return (
+    <div className="page">
+      <section className="page-hero compact-hero">
+        <p className="eyebrow"><UsersRound size={16} /> Creators</p>
+        <h1>Creator discovery</h1>
+      </section>
+      {loading ? <div className="loading-state">Loading creators…</div> : (
+        <div className="sellers-grid">
+          {influencers.map((creator) => (
+            <Link className="seller-card" key={creator.id} to={`/influencers/${creator.id}`}>
+              <div className="seller-card-banner">
+                {creator.profileImageUrl
+                  ? <img src={creator.profileImageUrl} alt={creator.name} />
+                  : <div className="seller-card-banner-placeholder" />}
+              </div>
+              <div className="seller-card-body">
+                <div className="seller-card-top">
+                  <span className="avatar">{creator.name?.charAt(0)}</span>
+                  <div className="seller-card-names">
+                    <strong>{creator.name}</strong>
+                    {creator.niche ? <small>{titleCase(creator.niche)}</small> : null}
+                  </div>
+                </div>
+                {creator.bio ? <p className="seller-card-bio">{creator.bio}</p> : null}
+                <div className="seller-card-tags">
+                  {creator.followerCount ? <span className="pill">{creator.followerCount.toLocaleString()} followers</span> : null}
+                  {creator.totalReferrals > 0 ? <span className="pill">{creator.totalReferrals} referrals</span> : null}
+                  {creator.instagramUrl ? <span className="pill">Instagram</span> : null}
+                  {creator.youtubeUrl ? <span className="pill">YouTube</span> : null}
+                </div>
+              </div>
+            </Link>
+          ))}
+          {!influencers.length ? <EmptyState title="No creators found" /> : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function InfluencerProfilePage() {
@@ -164,11 +209,10 @@ export function InfluencerProfilePage() {
   const [collabOpen, setCollabOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    influencersApi.get(id).then((user) => {
-      setCreator(user);
-    }).catch(() => {});
+    influencersApi.get(id).then(setCreator).catch(() => {});
   }, [id]);
 
   async function sendCollaborationRequest(event) {
@@ -186,19 +230,54 @@ export function InfluencerProfilePage() {
     }
   }
 
+  function copyCode() {
+    navigator.clipboard.writeText(creator.referralCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <div className="page">
       <section className="page-hero compact-hero">
         <p className="eyebrow">Creator profile{creator?.niche ? ` · ${titleCase(creator.niche)}` : ''}</p>
         <h1>{creator?.name || 'Influencer'}</h1>
-        <p>{creator?.email}</p>
+        {creator?.bio ? <p className="storefront-bio">{creator.bio}</p> : null}
         <div className="hero-actions">
           {creator?.followerCount ? <span className="pill">{creator.followerCount.toLocaleString()} followers</span> : null}
+          {creator?.totalReferrals > 0 ? <span className="pill">{creator.totalReferrals} referrals</span> : null}
           {creator?.instagramUrl ? <a className="btn btn-ghost" href={creator.instagramUrl} target="_blank" rel="noreferrer">Instagram</a> : null}
           {creator?.youtubeUrl ? <a className="btn btn-ghost" href={creator.youtubeUrl} target="_blank" rel="noreferrer">YouTube</a> : null}
-          {isAuthenticated && role === Role.SELLER ? <Button onClick={() => setCollabOpen(true)}><Sparkles size={16} /> Request collaboration</Button> : null}
         </div>
       </section>
+
+      {creator?.referralCode ? (
+        <section className="section storefront-section">
+          <h2>Use their code at checkout</h2>
+          <p className="muted">Support {creator.name} by entering this code when you place an order on Bakeaura.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px' }}>
+            <span className="referral-code">{creator.referralCode}</span>
+            <Button variant="ghost" onClick={copyCode}>{copied ? 'Copied!' : 'Copy'}</Button>
+          </div>
+        </section>
+      ) : null}
+
+      {isAuthenticated && role === Role.SELLER ? (
+        <section className="section storefront-section">
+          <h2>Work with {creator?.name || 'this creator'}</h2>
+          <p className="muted">Send a collaboration request and {creator?.name || 'they'} will promote your bakery to their audience.</p>
+          <div style={{ marginTop: '16px' }}>
+            <Button onClick={() => setCollabOpen(true)}><Sparkles size={16} /> Request collaboration</Button>
+          </div>
+        </section>
+      ) : null}
+
+      {creator && !creator.referralCode && !creator.followerCount && !creator.totalReferrals && !creator.bio && !creator.instagramUrl && !creator.youtubeUrl && !(isAuthenticated && role === Role.SELLER) ? (
+        <section className="section storefront-section">
+          <EmptyState title="This creator hasn't filled in their profile yet" />
+        </section>
+      ) : null}
+
       <Modal open={collabOpen} title={`Request a collaboration with ${creator?.name || 'this creator'}`} onClose={() => setCollabOpen(false)}>
         <form className="form-card" onSubmit={sendCollaborationRequest}>
           <Input label="Message (optional)" as="textarea" rows="4" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Tell them about your shop and what you're proposing." />
@@ -207,8 +286,4 @@ export function InfluencerProfilePage() {
       </Modal>
     </div>
   );
-}
-
-function Directory({ title, eyebrow, icon, children }) {
-  return <div className="page"><section className="page-hero compact-hero"><p className="eyebrow">{icon}{eyebrow}</p><h1>{title}</h1></section><div className="grid people-grid">{children}</div></div>;
 }

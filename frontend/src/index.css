@@ -1025,7 +1025,17 @@ textarea.input { resize: vertical; }
 .role-option span small { font-weight: 400; color: var(--ink-soft); font-size: 0.78rem; }
 .role-option.selected { border-color: var(--sienna); background: #fff7f2; }
 .role-option.selected strong { color: var(--sienna); }
-.order-card, .table-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto auto; gap: 14px; align-items: center; padding: 16px; }
+.table-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto auto; gap: 14px; align-items: center; padding: 16px; }
+.order-card { display: flex; flex-direction: column; gap: 0; padding: 0; transition: box-shadow 0.18s ease, transform 0.15s ease; }
+.order-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.10); transform: translateY(-1px); }
+.order-card-link { display: block; padding: 18px 20px 14px; text-decoration: none; color: inherit; }
+.order-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 4px; }
+.order-card-head h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--espresso); }
+.order-card-head small { display: block; font-size: 0.78rem; color: var(--ink-soft); margin-top: 2px; font-weight: 400; }
+.order-card-items { font-size: 0.875rem; color: var(--ink-soft); margin: 6px 0 12px; }
+.order-card-foot { display: flex; align-items: center; gap: 8px; }
+.order-card-foot strong { margin-left: auto; font-size: 1rem; color: var(--espresso); }
+.order-card-cancel { border-top: 1px solid var(--border); padding: 10px 20px; }
 .timeline { display: grid; gap: 10px; margin: 24px 0; }
 .timeline span { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); }
 .timeline span.done { color: var(--sage); font-weight: 800; }
@@ -1139,7 +1149,7 @@ textarea.input { resize: vertical; }
   .campaign-photo { min-height: 300px; }
   .auth-art { min-height: 320px; }
   .summary-panel { position: static; }
-  .cart-row, .order-card, .table-row { grid-template-columns: 1fr; }
+  .cart-row, .table-row { grid-template-columns: 1fr; }
   .products-toolbar { gap: 8px; }
   .toolbar-right { width: 100%; justify-content: space-between; }
   .price-range { display: none; }

@@ -13,6 +13,7 @@ export default function ProductCard({ product, summary, onFavourite, compact = f
   const [inView, setInView] = useState(false);
   const [isFavourited, setIsFavourited] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [cartLoading, setCartLoading] = useState(false);
 
   function entryDelay() {
     try {
@@ -38,6 +39,7 @@ export default function ProductCard({ product, summary, onFavourite, compact = f
       toast.error('Login to add items to cart');
       return;
     }
+    setCartLoading(true);
     try {
       await cartApi.add(product.id, 1);
       toast.success('Added to cart');
@@ -45,6 +47,8 @@ export default function ProductCard({ product, summary, onFavourite, compact = f
       setTimeout(() => setAddedToCart(false), 2000);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not add to cart');
+    } finally {
+      setCartLoading(false);
     }
   }
 
@@ -78,9 +82,10 @@ export default function ProductCard({ product, summary, onFavourite, compact = f
           <button
             className={`pc-add-btn ${addedToCart ? 'added' : ''}`}
             onClick={addToCart}
+            disabled={cartLoading || addedToCart}
             aria-label="Add to cart"
           >
-            {addedToCart ? 'ADDED ✓' : 'ADD'}
+            {cartLoading ? '...' : addedToCart ? 'ADDED ✓' : 'ADD'}
           </button>
         )}
       </div>

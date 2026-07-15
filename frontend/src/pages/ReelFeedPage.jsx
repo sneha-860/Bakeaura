@@ -1,75 +1,113 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { reelsApi } from "../api/reels";
-import { unwrapPage } from "../utils/format";
-import { Play, Pause, Heart, MessageCircle, Bookmark, Share2, User, Clock } from "lucide-react";
+import { contentApi } from "../api/content";
+import { Play, Pause, Heart, Bookmark, User, Clock } from "lucide-react";
+
+const PAGE_SIZE = 20;
 
 export default function ReelFeedPage() {
   const [reels, setReels] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [playing, setPlaying] = useState({});
+  // Track which reels this user has already liked/saved this session to prevent double-hits
+  const likedReels = useRef(new Set());
+  const savedReels = useRef(new Set());
+  // Track which reels have been viewed this session so view only fires once per reel
+  const viewedReels = useRef(new Set());
   const videoRefs = useRef({});
 
   useEffect(() => {
-    fetchReels();
+    fetchPage(0, true);
   }, []);
 
-  const fetchReels = async () => {
+  async function fetchPage(pageNum, replace) {
+    replace ? setLoading(true) : setLoadingMore(true);
     try {
-      setLoading(true);
-      const page = await reelsApi.feed(0, 20);
-      setReels(unwrapPage(page).items);
+      // contentApi.feed() returns a ranked List<FeedItem> (plain array, not a Page).
+      // FeedItem has the same field names (id, videoUrl, likeCount, etc.) as ReelResponseDTO.
+      const items = await contentApi.feed({ page: pageNum, size: PAGE_SIZE }) || [];
+      setReels((prev) => replace ? items : [...prev, ...items]);
+      setPage(pageNum);
+      // If we got a full page, there may be more; if short, we've reached the end.
+      setHasMore(items.length === PAGE_SIZE);
     } catch (err) {
       setError("Failed to load reels. Please try again.");
-      console.error(err);
     } finally {
-      setLoading(false);
+      replace ? setLoading(false) : setLoadingMore(false);
     }
-  };
+  }
 
-  const handleLike = async (reelId) => {
+  function loadMore() {
+    if (!loadingMore && hasMore) fetchPage(page + 1, false);
+  }
+
+  async function handleLike(reelId) {
+    const alreadyLiked = likedReels.current.has(reelId);
     try {
-      await reelsApi.like(reelId);
-      setReels(prev => prev.map(r => r.id === reelId ? { ...r, likeCount: r.likeCount + 1 } : r));
+      if (alreadyLiked) {
+        await reelsApi.unlike(reelId);
+        likedReels.current.delete(reelId);
+        setReels((prev) => prev.map((r) => r.id === reelId ? { ...r, likeCount: Math.max(0, r.likeCount - 1) } : r));
+      } else {
+        await reelsApi.like(reelId);
+        likedReels.current.add(reelId);
+        setReels((prev) => prev.map((r) => r.id === reelId ? { ...r, likeCount: r.likeCount + 1 } : r));
+      }
     } catch (err) {
-      console.error("Like failed", err);
+      // silently ignore auth errors (unauthenticated user) — button is still shown
     }
-  };
+  }
 
-  const handleSave = async (reelId) => {
+  async function handleSave(reelId) {
+    const alreadySaved = savedReels.current.has(reelId);
     try {
-      await reelsApi.save(reelId);
-      setReels(prev => prev.map(r => r.id === reelId ? { ...r, saveCount: (r.saveCount || 0) + 1 } : r));
+      if (alreadySaved) {
+        await reelsApi.unsave(reelId);
+        savedReels.current.delete(reelId);
+        setReels((prev) => prev.map((r) => r.id === reelId ? { ...r, saveCount: Math.max(0, (r.saveCount || 0) - 1) } : r));
+      } else {
+        await reelsApi.save(reelId);
+        savedReels.current.add(reelId);
+        setReels((prev) => prev.map((r) => r.id === reelId ? { ...r, saveCount: (r.saveCount || 0) + 1 } : r));
+      }
     } catch (err) {
-      console.error("Save failed", err);
+      // silently ignore auth errors
     }
-  };
+  }
 
-  const togglePlay = (reelId) => {
+  function togglePlay(reelId) {
     const video = videoRefs.current[reelId];
     if (video) {
       if (video.paused) {
         video.play();
-        setPlaying(prev => ({ ...prev, [reelId]: true }));
-        reelsApi.view(reelId).catch(() => {});
+        setPlaying((prev) => ({ ...prev, [reelId]: true }));
+        // View count fires only once per reel per page load
+        if (!viewedReels.current.has(reelId)) {
+          viewedReels.current.add(reelId);
+          reelsApi.view(reelId).catch(() => {});
+        }
       } else {
         video.pause();
-        setPlaying(prev => ({ ...prev, [reelId]: false }));
+        setPlaying((prev) => ({ ...prev, [reelId]: false }));
       }
     }
-  };
+  }
 
-  const handleVideoEnd = (reelId) => {
-    setPlaying(prev => ({ ...prev, [reelId]: false }));
-  };
+  function handleVideoEnd(reelId) {
+    setPlaying((prev) => ({ ...prev, [reelId]: false }));
+  }
 
-  const formatDuration = (seconds) => {
+  function formatDuration(seconds) {
     if (!seconds) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
 
   if (loading) {
     return (
@@ -117,24 +155,20 @@ export default function ReelFeedPage() {
       </section>
 
       <div className="reel-feed">
-        {reels.map((reel, index) => (
+        {reels.map((reel) => (
           <div key={reel.id} className="reel-card">
             <div className="reel-video-container">
               <video
-                ref={el => videoRefs.current[reel.id] = el}
+                ref={(el) => { videoRefs.current[reel.id] = el; }}
                 src={reel.videoUrl}
                 className="reel-video"
-                loop
                 muted
                 onClick={() => togglePlay(reel.id)}
                 onEnded={() => handleVideoEnd(reel.id)}
                 poster={reel.thumbnailUrl}
               />
-              
-              <button
-                className="reel-play-button"
-                onClick={() => togglePlay(reel.id)}
-              >
+
+              <button className="reel-play-button" onClick={() => togglePlay(reel.id)}>
                 {playing[reel.id] ? <Pause size={32} /> : <Play size={32} />}
               </button>
 
@@ -147,28 +181,28 @@ export default function ReelFeedPage() {
                     </Link>
                   </div>
                   <p className="reel-caption">{reel.caption}</p>
-                  <div className="reel-meta">
-                    <Clock size={12} />
-                    <span>{formatDuration(reel.durationSeconds)}</span>
-                  </div>
+                  {reel.durationSeconds ? (
+                    <div className="reel-meta">
+                      <Clock size={12} />
+                      <span>{formatDuration(reel.durationSeconds)}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="reel-actions">
-                  <button className="reel-action" onClick={() => handleLike(reel.id)}>
+                  <button
+                    className={`reel-action${likedReels.current.has(reel.id) ? ' active' : ''}`}
+                    onClick={() => handleLike(reel.id)}
+                  >
                     <Heart size={20} />
                     <span>{reel.likeCount}</span>
                   </button>
-                  <button className="reel-action">
-                    <MessageCircle size={20} />
-                    <span>{reel.commentCount}</span>
-                  </button>
-                  <button className="reel-action" onClick={() => handleSave(reel.id)}>
+                  <button
+                    className={`reel-action${savedReels.current.has(reel.id) ? ' active' : ''}`}
+                    onClick={() => handleSave(reel.id)}
+                  >
                     <Bookmark size={20} />
-                    <span>{reel.saveCount}</span>
-                  </button>
-                  <button className="reel-action">
-                    <Share2 size={20} />
-                    <span>Share</span>
+                    <span>{reel.saveCount || 0}</span>
                   </button>
                 </div>
               </div>
@@ -176,6 +210,14 @@ export default function ReelFeedPage() {
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', padding: '1rem' }}>
+          <button className="btn btn-ghost" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

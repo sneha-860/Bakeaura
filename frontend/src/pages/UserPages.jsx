@@ -17,6 +17,7 @@ import AddressCard from '../components/AddressCard';
 import ApplyRoleModal from '../components/ApplyRoleModal';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
+import SkeletonCard from '../components/SkeletonCard';
 import Input from '../components/Input';
 import NotificationItem from '../components/NotificationItem';
 import ProductCard from '../components/ProductCard';
@@ -520,10 +521,16 @@ export function RoleApplicationPage() {
 
 export function CustomOrdersPage() {
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const highlight = searchParams.get('highlight');
 
-  useEffect(() => { customOrdersApi.myRequests().then(setRequests).catch(() => setRequests([])); }, []);
+  useEffect(() => {
+    customOrdersApi.myRequests()
+      .then(setRequests)
+      .catch(() => setRequests([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!highlight || !requests.length) return;
@@ -539,16 +546,18 @@ export function CustomOrdersPage() {
     <div className="page">
       <section className="page-hero compact-hero"><p className="eyebrow">Custom cakes</p><h1>Your custom order requests</h1></section>
       <div className="stack">
-        {requests.map((request) => (
-          <article className="panel" key={request.id} data-id={request.id}>
-            <span className="pill">{titleCase(request.status)}</span>
-            <h3>{request.occasion} · serves {request.serves}</h3>
-            <p>{request.designBrief}</p>
-            <small>Budget ₹{request.budgetMin}–₹{request.budgetMax} · requested {formatDate(request.createdAt)}</small>
-            {request.status === 'QUOTED' ? <p><strong>Seller quote: {currency(request.sellerQuote)}</strong></p> : null}
-          </article>
-        ))}
-        {!requests.length ? <EmptyState title="No custom order requests yet" text="Visit a seller's storefront to request a custom cake." /> : null}
+        {loading
+          ? <SkeletonCard />
+          : requests.map((request) => (
+            <article className="panel" key={request.id} data-id={request.id}>
+              <span className="pill">{titleCase(request.status)}</span>
+              <h3>{request.occasion} · serves {request.serves}</h3>
+              <p>{request.designBrief}</p>
+              <small>Budget ₹{request.budgetMin}–₹{request.budgetMax} · requested {formatDate(request.createdAt)}</small>
+              {request.status === 'QUOTED' ? <p><strong>Seller quote: {currency(request.sellerQuote)}</strong></p> : null}
+            </article>
+          ))}
+        {!loading && !requests.length ? <EmptyState title="No custom order requests yet" text="Visit a seller's storefront to request a custom cake." /> : null}
       </div>
     </div>
   );

@@ -88,7 +88,9 @@ export default function CakeDesignPage() {
   const orderForm = useForm({ resolver: zodResolver(orderSchema) });
 
   useEffect(() => {
-    sellersApi.list().then((res) => setSellers(res || [])).catch(() => {});
+    sellersApi.list()
+      .then((res) => setSellers((res || []).filter((s) => s.isOpen !== false)))
+      .catch(() => {});
   }, []);
 
   function handleFileSelect(file) {

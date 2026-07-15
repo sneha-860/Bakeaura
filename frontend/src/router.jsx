@@ -4,7 +4,7 @@ import RequireAuth from './components/RequireAuth';
 import NotFoundPage from './pages/NotFoundPage';
 import { Role } from './api/enums';
 import HomePage from './pages/HomePage';
-import { LoginPage, RegisterPage, VerifyEmailChangePage, VerifyEmailPage } from './pages/AuthPages';
+import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailChangePage, VerifyEmailPage } from './pages/AuthPages';
 import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import { CartPage, CheckoutPage } from './pages/CartCheckoutPages';
@@ -27,6 +27,8 @@ const router = createBrowserRouter([
       { path: '/register', element: <RegisterPage /> },
       { path: '/verify-email', element: <VerifyEmailPage /> },
       { path: '/verify-email-change', element: <VerifyEmailChangePage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
       { path: '/products', element: <ProductsPage /> },
       { path: '/products/:id', element: <ProductDetailPage /> },
       { path: '/sellers', element: <SellersPage /> },

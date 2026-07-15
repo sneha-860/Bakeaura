@@ -89,7 +89,9 @@ export function SellerDashboardPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [shopProfile, setShopProfile] = useState(null);
+  const [analyticsRevenue, setAnalyticsRevenue] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [toggleLoading, setToggleLoading] = useState(false);
   const shopForm = useForm({ resolver: zodResolver(shopProfileSchema) });
 
   function loadShopProfile(sellerId) {
@@ -113,6 +115,7 @@ export function SellerDashboardPage() {
       })
       .catch(() => toast.error('Could not load your profile'));
     ordersApi.sellerOrders().then((page) => setOrders(page?.content || [])).catch(() => setOrders([]));
+    sellersApi.analytics().then((a) => setAnalyticsRevenue(a.totalRevenueAllTime)).catch(() => {});
   }, []);
 
   async function saveShopProfile(values) {
@@ -132,18 +135,17 @@ export function SellerDashboardPage() {
   }
 
   async function toggleShopOpen() {
+    setToggleLoading(true);
     try {
       const updated = await sellersApi.toggleOpen();
       setShopProfile(updated);
       toast.success(updated.isOpen ? 'Shop is now open' : 'Shop is now closed');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not update shop status');
+    } finally {
+      setToggleLoading(false);
     }
   }
-
-  const gross = orders
-    .filter((order) => order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CANCELLED)
-    .reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
 
   const canOpenShop = shopProfile?.shopName &&
     shopProfile?.deliveryRadiusKm &&
@@ -173,9 +175,10 @@ export function SellerDashboardPage() {
               <Button
                 variant="ghost"
                 onClick={toggleShopOpen}
+                disabled={toggleLoading}
                 title={!canOpenShop && !shopProfile.isOpen ? 'Complete your shop setup to open' : undefined}
               >
-                {shopProfile.isOpen ? 'Close shop' : 'Open shop'}
+                {toggleLoading ? '...' : shopProfile.isOpen ? 'Close shop' : 'Open shop'}
               </Button>
             </>
           ) : null}
@@ -203,7 +206,7 @@ export function SellerDashboardPage() {
       <Stats cards={[
         ['Products', products.length, <Package />],
         ['New orders', orders.filter((o) => o.status === OrderStatus.CONFIRMED).length, <ShoppingBag />],
-        ['Delivered revenue', currency(gross), <Users />]
+        ['All-time revenue', analyticsRevenue != null ? currency(analyticsRevenue) : '—', <Users />]
       ]} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
@@ -364,15 +367,19 @@ export function MyProductsPage() {
 export function IncomingOrdersPage() {
   const [status, setStatus] = useState('');
   const [orders, setOrders] = useState([]);
+  const [updatingOrder, setUpdatingOrder] = useState(null);
   const load = () => ordersApi.sellerOrders(status).then((page) => setOrders(page?.content || [])).catch(() => setOrders([]));
   useEffect(() => { load(); }, [status]);
 
   async function update(id, nextStatus) {
+    setUpdatingOrder(`${id}:${nextStatus}`);
     try {
       await ordersApi.updateStatus(id, nextStatus);
       load();
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not update order status');
+    } finally {
+      setUpdatingOrder(null);
     }
   }
 
@@ -401,8 +408,8 @@ export function IncomingOrdersPage() {
             {SELLER_NEXT[order.status]?.length > 0 ? (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {SELLER_NEXT[order.status].map((nextStatus) => (
-                  <Button key={nextStatus} variant="ghost" onClick={() => update(order.id, nextStatus)}>
-                    {titleCase(nextStatus)}
+                  <Button key={nextStatus} variant="ghost" disabled={updatingOrder === `${order.id}:${nextStatus}`} onClick={() => update(order.id, nextStatus)}>
+                    {updatingOrder === `${order.id}:${nextStatus}` ? '...' : titleCase(nextStatus)}
                   </Button>
                 ))}
               </div>
@@ -420,6 +427,7 @@ export function SellerCustomOrdersPage() {
   const [requests, setRequests] = useState([]);
   const [quoting, setQuoting] = useState(null);
   const [quoteAmount, setQuoteAmount] = useState('');
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [searchParams] = useSearchParams();
   const highlight = searchParams.get('highlight');
 
@@ -459,14 +467,22 @@ export function SellerCustomOrdersPage() {
   }
 
   async function submitQuote() {
+    const amount = Number(quoteAmount);
+    if (!quoteAmount || isNaN(amount) || amount <= 0) {
+      toast.error('Please enter a valid quote amount greater than zero');
+      return;
+    }
+    setQuoteLoading(true);
     try {
-      await customOrdersApi.quote(quoting.id, Number(quoteAmount));
+      await customOrdersApi.quote(quoting.id, amount);
       toast.success('Quote sent');
       setQuoting(null);
       setQuoteAmount('');
       load();
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not send quote');
+    } finally {
+      setQuoteLoading(false);
     }
   }
 
@@ -496,10 +512,10 @@ export function SellerCustomOrdersPage() {
         ))}
         {!visible.length ? <EmptyState title="No custom order requests" /> : null}
       </div>
-      <Modal open={Boolean(quoting)} title="Send a quote" onClose={() => setQuoting(null)}>
+      <Modal open={Boolean(quoting)} title="Send a quote" onClose={() => { setQuoting(null); setQuoteAmount(''); }}>
         <div className="form-card">
-          <Input label="Quote amount (₹)" type="number" value={quoteAmount} onChange={(event) => setQuoteAmount(event.target.value)} />
-          <Button onClick={submitQuote}>Send quote</Button>
+          <Input label="Quote amount (₹)" type="number" min="1" step="1" value={quoteAmount} onChange={(event) => setQuoteAmount(event.target.value)} />
+          <Button onClick={submitQuote} disabled={quoteLoading}>{quoteLoading ? 'Sending…' : 'Send quote'}</Button>
         </div>
       </Modal>
     </div>
@@ -967,6 +983,7 @@ export function AdminPayoutsPage() {
                 <small>to {request.upiId} · approved {formatDate(request.processedAt)}</small>
                 <div className="modal-actions">
                   <Button onClick={() => markPaid(request.id)} disabled={actionLoading}>Mark as paid</Button>
+                  <Button variant="ghost" onClick={() => setSelected(request)} disabled={actionLoading}>Reject</Button>
                 </div>
               </article>
             ))}
@@ -1209,7 +1226,7 @@ export function InfluencerWalletPage() {
   const [transactions, setTransactions] = useState([]);
   const [history, setHistory] = useState([]);
   const [referralCodes, setReferralCodes] = useState([]);
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(payoutSchema) });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({ resolver: zodResolver(payoutSchema) });
   const [searchParams] = useSearchParams();
   const highlight = searchParams.get('highlight');
 
@@ -1302,7 +1319,7 @@ export function InfluencerWalletPage() {
             <form className="form-card" onSubmit={handleSubmit(submitPayout)}>
               <Input label="Amount (₹)" type="number" step="1" error={errors.amount?.message} {...register('amount')} />
               <Input label="UPI ID" placeholder="yourname@upi" error={errors.upiId?.message} {...register('upiId')} />
-              <Button>Request payout</Button>
+              <Button disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Request payout'}</Button>
             </form>
           )}
         </aside>
@@ -1380,7 +1397,7 @@ export function AdminCategoriesPage() {
             <Input label="Name" error={form.formState.errors.name?.message} {...form.register('name')} />
             <Input label="Description" as="textarea" rows="3" error={form.formState.errors.description?.message} {...form.register('description')} />
             <Input label="Image URL" error={form.formState.errors.imageUrl?.message} {...form.register('imageUrl')} />
-            <Button>{editing ? 'Update' : 'Create'}</Button>
+            <Button disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? 'Saving...' : editing ? 'Update' : 'Create'}</Button>
             {editing ? <Button type="button" variant="ghost" onClick={() => { setEditing(null); form.reset(); }}>Cancel</Button> : null}
           </form>
         </aside>

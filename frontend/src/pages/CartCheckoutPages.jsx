@@ -40,18 +40,24 @@ export function CartPage() {
   const navigate = useNavigate();
   const { setCartCount } = useAuthStore();
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     const nextCart = await cartApi.get().catch(() => ({ items: [] }));
     const enriched = await enrichCart(nextCart);
     setItems(enriched);
     setCartCount(enriched.length);
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
 
   async function update(productId, quantity) {
-    await cartApi.update(productId, quantity);
+    if (quantity < 1) {
+      await cartApi.remove(productId);
+    } else {
+      await cartApi.update(productId, quantity);
+    }
     load();
   }
 
@@ -60,6 +66,7 @@ export function CartPage() {
     load();
   }
 
+  if (loading) return <div className="page"><div className="loading-state">Loading your cart…</div></div>;
   if (!items.length) return <div className="page"><EmptyState title="Your cart is empty" text="Add a fresh bake to begin checkout." actionLabel="Browse products" onAction={() => navigate('/products')} /></div>;
 
   return (
@@ -268,10 +275,13 @@ export function CheckoutPage() {
             navigate(`/orders/${order.id}`);
           } catch (err) {
             toast.error(err?.response?.data?.message || 'Payment verification failed. Check My Orders for status.');
+          } finally {
+            setIsPlacing(false);
           }
         },
         modal: {
           ondismiss: () => {
+            setIsPlacing(false);
             toast(
               `Payment cancelled. Order #${order.id} is saved — go to My Orders to complete payment.`,
               { duration: 6000 }
@@ -281,10 +291,10 @@ export function CheckoutPage() {
         }
       };
       new window.Razorpay(options).open();
+      // Button stays disabled (isPlacing=true) until handler or ondismiss fires above.
     } catch (error) {
-      toast.error(error?.response?.data?.message || error.message || 'Checkout failed');
-    } finally {
       setIsPlacing(false);
+      toast.error(error?.response?.data?.message || error.message || 'Checkout failed');
     }
   }
 

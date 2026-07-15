@@ -1,4 +1,5 @@
 import { ArrowRight, MapPin, ShieldCheck, Sparkles, Star, Truck, ChevronDown } from 'lucide-react';
+import { titleCase } from '../utils/format';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { categoriesApi } from '../api/categories';
@@ -34,7 +35,7 @@ export default function HomePage() {
         productsApi.list().catch(() => []),
         sellerPromise,
         influencersApi.list().catch(() => []),
-        contentApi.feed({ page: 1, size: 6 }).catch(() => [])
+        contentApi.feed({ page: 0, size: 6 }).catch(() => [])
       ]);
       if (mounted) setState({ loading: false, categories, products, sellers, influencers, feed });
     }
@@ -162,15 +163,46 @@ export default function HomePage() {
           <div><p className="eyebrow">Creator picks</p><h2>From the Bakeaura feed</h2></div>
           <Link to="/influencers">Meet creators</Link>
         </div>
-        <div className="grid story-grid">
-          {state.feed.slice(0, 6).map((item) => (
-            <article className="story-card" key={item.id}>
-              <ProductImage src={item.imageUrl || item.product?.imageUrl} alt={item.caption || item.product?.name} />
-              <div><span className="pill">{item.type}</span><h3>{item.product?.name || item.bakerName}</h3><p>{item.caption || item.product?.description}</p></div>
-            </article>
-          ))}
-          {!state.feed.length && state.influencers.slice(0, 3).map((creator) => <Link className="person-card" key={creator.id} to={`/influencers/${creator.id}`}><span className="avatar">{creator.name?.charAt(0)}</span><strong>{creator.name}</strong><small>{creator.email}</small></Link>)}
-        </div>
+        {state.feed.length ? (
+          <div className="grid story-grid">
+            {state.feed.slice(0, 6).map((item) => (
+              <article className="story-card" key={item.id}>
+                <ProductImage src={item.imageUrl || item.product?.imageUrl} alt={item.caption || item.product?.name} />
+                <div><span className="pill">{item.type}</span><h3>{item.product?.name || item.bakerName}</h3><p>{item.caption || item.product?.description}</p></div>
+              </article>
+            ))}
+          </div>
+        ) : state.influencers.length ? (
+          <div className="sellers-grid">
+            {state.influencers.slice(0, 3).map((creator) => (
+              <Link className="seller-card" key={creator.id} to={`/influencers/${creator.id}`}>
+                <div className="seller-card-banner">
+                  {creator.profileImageUrl
+                    ? <img src={creator.profileImageUrl} alt={creator.name} />
+                    : <div className="seller-card-banner-placeholder" />}
+                </div>
+                <div className="seller-card-body">
+                  <div className="seller-card-top">
+                    <span className="avatar">{creator.name?.charAt(0)}</span>
+                    <div className="seller-card-names">
+                      <strong>{creator.name}</strong>
+                      {creator.niche ? <small>{titleCase(creator.niche)}</small> : null}
+                    </div>
+                  </div>
+                  {creator.bio ? <p className="seller-card-bio">{creator.bio}</p> : null}
+                  <div className="seller-card-tags">
+                    {creator.followerCount ? <span className="pill">{creator.followerCount.toLocaleString()} followers</span> : null}
+                    {creator.totalReferrals > 0 ? <span className="pill">{creator.totalReferrals} referrals</span> : null}
+                    {creator.instagramUrl ? <span className="pill">Instagram</span> : null}
+                    {creator.youtubeUrl ? <span className="pill">YouTube</span> : null}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No creator content yet" />
+        )}
       </section>
 
     </div>

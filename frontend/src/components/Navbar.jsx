@@ -1,6 +1,6 @@
-import { Bell, Heart, LogOut, Menu, Search, ShoppingBag, UserRound, X, ChevronDown, MapPin, ClipboardList, Sparkles } from 'lucide-react';
+import { Bell, Heart, LogOut, Menu, Package, Search, ShoppingBag, UserRound, X, ChevronDown, MapPin, ClipboardList, Sparkles } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { authApi } from '../api/auth';
 import { cartApi } from '../api/cart';
 import { favouritesApi } from '../api/favourites';
@@ -15,6 +15,7 @@ import { ApplicationStatus } from '../api/enums';
 
 export default function Navbar() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated, role, email, name, logout, cartCount, setCartCount, emailVerified, id: userId } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -50,6 +51,11 @@ export default function Navbar() {
     }, [isAuthenticated, userId]);
 
     useEffect(() => {
+        setOpen(false);
+        setProfileDropdownOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
         function handleClickOutside(event) {
             if (profileRef.current && !profileRef.current.contains(event.target)) {
                 setProfileDropdownOpen(false);
@@ -79,6 +85,7 @@ export default function Navbar() {
         <>
             <NavLink to="/products" end>Products</NavLink>
             <NavLink to="/sellers" end>Bakers</NavLink>
+            <NavLink to="/influencers" end>Creators</NavLink>
             <NavLink to="/reels" end>Reels</NavLink>
             {role === Role.CUSTOMER ? (
                 <NavLink to="/design">Design a Cake</NavLink>
@@ -87,12 +94,7 @@ export default function Navbar() {
                 <NavLink to="/seller" end>Seller Studio</NavLink>
             ) : null}
             {role === Role.INFLUENCER ? (
-                <>
-                    <NavLink to="/influencer" end>Creator Hub</NavLink>
-                    <NavLink to="/influencer/collaborations">Collaborations</NavLink>
-                    <NavLink to="/influencer/wallet">Wallet</NavLink>
-                    <NavLink to="/reels/upload">Upload Reel</NavLink>
-                </>
+                <NavLink to="/influencer" end>Creator Hub</NavLink>
             ) : null}
             {role === Role.ADMIN ? (
                 <>
@@ -154,6 +156,12 @@ export default function Navbar() {
                                         <UserRound size={16} />
                                         <span>Profile</span>
                                     </Link>
+                                    {role === Role.CUSTOMER ? (
+                                        <Link to="/orders" onClick={() => setProfileDropdownOpen(false)} role="menuitem">
+                                            <Package size={16} />
+                                            <span>My Orders</span>
+                                        </Link>
+                                    ) : null}
                                     <Link to="/addresses" onClick={() => setProfileDropdownOpen(false)} role="menuitem">
                                         <MapPin size={16} />
                                         <span>Addresses</span>
@@ -164,7 +172,7 @@ export default function Navbar() {
                                             <span>Custom Orders</span>
                                         </Link>
                                     ) : null}
-                                    {role !== Role.SELLER && role !== Role.ADMIN && !myApplications.some((a) => a.status === 'PENDING') && (
+                                    {role !== Role.SELLER && role !== Role.ADMIN && role !== Role.INFLUENCER && !myApplications.some((a) => a.status === 'PENDING') && (
                                         emailVerified
                                             ? <button onClick={(e) => { e.stopPropagation(); setProfileDropdownOpen(false); setTimeout(() => setRoleModalOpen(true), 100); }} role="menuitem">
                                                 <Sparkles size={16} />

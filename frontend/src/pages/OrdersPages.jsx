@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, Package, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -35,10 +35,12 @@ const VALID_NEXT = {
 export function MyOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('');
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     const result = await ordersApi.myOrders().catch(() => []);
     setOrders(Array.isArray(result) ? result : []);
+    setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
@@ -55,9 +57,19 @@ export function MyOrdersPage() {
   const visible = filter ? orders.filter((order) => order.status === filter) : orders;
   return (
     <div className="page">
-      <section className="page-hero compact-hero"><h1>My orders</h1></section>
-      <div className="tabs"><button className={!filter ? 'active' : ''} onClick={() => setFilter('')}>All</button>{statuses.map((status) => <button key={status} className={filter === status ? 'active' : ''} onClick={() => setFilter(status)}>{titleCase(status)}</button>)}</div>
-      <OrderList orders={visible} onCancel={cancel} />
+      <section className="page-hero compact-hero">
+        <p className="eyebrow"><Package size={16} /> Orders</p>
+        <h1>My orders</h1>
+      </section>
+      <div className="tabs">
+        <button className={!filter ? 'active' : ''} onClick={() => setFilter('')}>All</button>
+        {statuses.map((status) => (
+          <button key={status} className={filter === status ? 'active' : ''} onClick={() => setFilter(status)}>
+            {titleCase(status)}
+          </button>
+        ))}
+      </div>
+      {loading ? <div className="loading-state">Loading orders…</div> : <OrderList orders={visible} onCancel={cancel} />}
     </div>
   );
 }
@@ -69,17 +81,21 @@ export function OrderDetailPage() {
   const [payment, setPayment] = useState(null);
   const [myReview, setMyReview] = useState(null);
   const [reviewChecked, setReviewChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({ resolver: zodResolver(reviewSchema), defaultValues: { rating: 5, comment: '' } });
 
   useEffect(() => {
-    ordersApi.get(id).then(setOrder).catch(() => setOrder(null));
+    ordersApi.get(id).then(setOrder).catch(() => setOrder(null)).finally(() => setLoading(false));
     paymentsApi.byOrder(id).then(setPayment).catch(() => setPayment(null));
     const client = createSocketClient();
     client.onConnect = () => {
       client.subscribe(`/topic/order/${id}`, (message) => {
         const payload = JSON.parse(message.body);
-        setOrder((current) => current ? { ...current, status: payload.status } : current);
-        toast(payload.message || 'Order updated');
+        if (payload.status) {
+          setOrder((current) => current ? { ...current, status: payload.status } : current);
+          toast(payload.message || 'Order updated');
+        }
       });
     };
     client.activate();
@@ -88,14 +104,10 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     if (!order || order.status !== OrderStatus.DELIVERED || role !== Role.CUSTOMER) return;
-    if (!order.sellerId) return;
     let mounted = true;
-    reviewsApi.sellerReviews(order.sellerId)
-      .then((reviews) => {
-        if (!mounted) return;
-        setMyReview((reviews || []).find((review) => review.orderId === order.id) || null);
-      })
-      .finally(() => mounted && setReviewChecked(true));
+    reviewsApi.myReview(order.id)
+      .then((review) => { if (mounted) setMyReview(review || null); })
+      .finally(() => { if (mounted) setReviewChecked(true); });
     return () => { mounted = false; };
   }, [order, role]);
 
@@ -118,12 +130,16 @@ export function OrderDetailPage() {
   }
 
   async function submitReview(values) {
+    if (reviewSubmitting) return;
+    setReviewSubmitting(true);
     try {
       setMyReview(await reviewsApi.create(order.id, values));
       reset();
       toast.success('Review saved');
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Could not save review');
+    } finally {
+      setReviewSubmitting(false);
     }
   }
 
@@ -137,6 +153,7 @@ export function OrderDetailPage() {
     }
   }
 
+  if (loading) return <div className="page"><div className="loading-state">Loading order…</div></div>;
   if (!order) return <div className="page"><EmptyState title="Order not found" /></div>;
 
   return (
@@ -174,7 +191,7 @@ export function OrderDetailPage() {
               <form style={{ display: 'grid', gap: 14 }} onSubmit={handleSubmit(submitReview)}>
                 <Input label="Rating (1-5)" type="number" min="1" max="5" error={errors.rating?.message} {...register('rating')} />
                 <Input label="Comment" as="textarea" rows="3" error={errors.comment?.message} {...register('comment')} />
-                <Button>Submit review</Button>
+                <Button disabled={reviewSubmitting}>{reviewSubmitting ? 'Submitting…' : 'Submit review'}</Button>
               </form>
             )}
           </div>
@@ -195,14 +212,44 @@ export function OrderList({ orders, onCancel }) {
   if (!orders.length) return <EmptyState title="No orders yet" />;
   return (
     <div className="stack">
-      {orders.map((order) => (
-        <article className="order-card" key={order.id}>
-          <div><Link to={`/orders/${order.id}`}><h3>Order #{order.id}</h3></Link><p>{order.sellerName || order.customerName}</p><small>{formatDate(order.createdAt)}</small></div>
-          <OrderStatusBadge status={order.status} />
-          <strong>{currency(order.totalAmount)}</strong>
-          {onCancel && [OrderStatus.PENDING, OrderStatus.CONFIRMED].includes(order.status) ? <Button variant="ghost" onClick={() => onCancel(order.id)}>Cancel</Button> : null}
-        </article>
-      ))}
+      {orders.map((order) => {
+        const firstItem = order.items?.[0];
+        const extraCount = (order.items?.length || 0) - 1;
+        const itemSummary = firstItem
+          ? `${firstItem.productName}${extraCount > 0 ? ` + ${extraCount} more item${extraCount > 1 ? 's' : ''}` : ''}`
+          : null;
+        const isScheduled = order.orderType === 'SCHEDULED';
+        const canCancel = onCancel && [OrderStatus.PENDING, OrderStatus.CONFIRMED].includes(order.status);
+
+        return (
+          <article className="order-card" key={order.id}>
+            <Link to={`/orders/${order.id}`} className="order-card-link">
+              <div className="order-card-head">
+                <div>
+                  <h3>{order.sellerName || 'Baker'}</h3>
+                  <small>Order #{order.id} · {formatDate(order.createdAt)}</small>
+                </div>
+                <OrderStatusBadge status={order.status} />
+              </div>
+              {itemSummary ? <p className="order-card-items">{itemSummary}</p> : null}
+              <div className="order-card-foot">
+                <span className="pill">{isScheduled ? 'Scheduled' : 'Instant'}</span>
+                {isScheduled && order.scheduledDeliveryDate
+                  ? <span className="pill">Deliver {order.scheduledDeliveryDate}</span>
+                  : null}
+                <strong>{currency(order.totalAmount)}</strong>
+              </div>
+            </Link>
+            {canCancel ? (
+              <div className="order-card-cancel">
+                <Button variant="ghost" onClick={() => onCancel(order.id)}>
+                  <XCircle size={15} /> Cancel order
+                </Button>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }
