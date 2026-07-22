@@ -37,14 +37,37 @@ const customOrderSchema = z.object({
 export function SellersPage() {
   const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isNearby, setIsNearby] = useState(false);
+
   useEffect(() => {
-    sellersApi.list().then(setSellers).catch(() => setSellers([])).finally(() => setLoading(false));
+    if (!navigator.geolocation) {
+      sellersApi.list().then(setSellers).catch(() => setSellers([])).finally(() => setLoading(false));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        sellersApi.nearby({ latitude, longitude, radius: 10 })
+          .then((data) => { setSellers(data); setIsNearby(true); })
+          .catch(() => sellersApi.list().then(setSellers).catch(() => setSellers([])))
+          .finally(() => setLoading(false));
+      },
+      () => {
+        sellersApi.list().then(setSellers).catch(() => setSellers([])).finally(() => setLoading(false));
+      }
+    );
   }, []);
+
   return (
     <div className="page">
       <section className="page-hero compact-hero">
         <p className="eyebrow"><MapPin size={16} /> Sellers</p>
         <h1>Local bakers</h1>
+        {!loading && (
+          <p className="muted" style={{ marginTop: '8px', fontSize: '0.85rem' }}>
+            {isNearby ? 'Showing bakers within 10 km of you' : 'Enable location to see bakers near you'}
+          </p>
+        )}
       </section>
       {loading ? <div className="loading-state">Loading bakers…</div> : (
         <div className="sellers-grid">
@@ -77,7 +100,7 @@ export function SellersPage() {
               </div>
             </Link>
           ))}
-          {!sellers.length ? <EmptyState title="No sellers found" /> : null}
+          {!sellers.length ? <EmptyState title={isNearby ? 'No bakers found within 10 km' : 'No sellers found'} /> : null}
         </div>
       )}
     </div>

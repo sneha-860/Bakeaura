@@ -498,6 +498,13 @@ export function SellerCustomOrdersPage() {
           <article className="panel" key={request.id} data-id={request.id}>
             <span className="pill">{titleCase(request.status)}</span>
             <h3>{request.occasion} · serves {request.serves}</h3>
+            {request.generatedImageUrl ? (
+              <img
+                src={request.generatedImageUrl}
+                alt="AI-generated cake design"
+                style={{ width: '100%', maxWidth: 320, borderRadius: 12, objectFit: 'cover', margin: '8px 0' }}
+              />
+            ) : null}
             <p>{request.designBrief}</p>
             <small>Budget ₹{request.budgetMin}–₹{request.budgetMax}</small>
             {request.status === 'QUOTED' ? <p><strong>Your quote: {currency(request.sellerQuote)}</strong></p> : null}
