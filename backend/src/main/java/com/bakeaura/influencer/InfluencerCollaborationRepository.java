@@ -18,5 +18,7 @@ public interface InfluencerCollaborationRepository
 
     Optional<InfluencerCollaboration> findFirstByInfluencerIdAndSellerIdAndStatusOrderByCreatedAtDesc(
             Long influencerId, Long sellerId, CollaborationStatus status);
+
+    long countByInfluencerIdAndStatus(Long influencerId, CollaborationStatus status);
 }
 

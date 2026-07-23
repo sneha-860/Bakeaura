@@ -2,7 +2,7 @@ package com.bakeaura.review;
 
 import com.bakeaura.enums.OrderStatus;
 import com.bakeaura.order.Order;
-import com.bakeaura.order.OrderRepository;
+import com.bakeaura.order.OrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +26,7 @@ class ReviewServiceTest {
     private ReviewRepository reviewRepository;
 
     @Mock
-    private OrderRepository orderRepository;
+    private OrderService orderService;
 
     @Mock
     private UserRepository userRepository;
@@ -35,7 +35,7 @@ class ReviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        reviewService = new ReviewService(reviewRepository, orderRepository, userRepository);
+        reviewService = new ReviewService(reviewRepository, orderService, userRepository);
     }
 
     @Test
@@ -87,7 +87,7 @@ class ReviewServiceTest {
         request.setComment("Great cake!");
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(customer));
-        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
+        when(orderService.getOrderEntityById(10L)).thenReturn(order);
         when(reviewRepository.existsByCustomerAndOrder(customer, order)).thenReturn(false);
         when(reviewRepository.save(any(Review.class))).thenAnswer(inv -> {
             Review r = inv.getArgument(0);
@@ -95,10 +95,9 @@ class ReviewServiceTest {
             return r;
         });
 
-        ReviewDto dto = reviewService.createReview(1L, 10L, request);
+        Long sellerId = reviewService.createReview(1L, 10L, request);
 
-        assertThat(dto.getRating()).isEqualTo(4);
-        assertThat(dto.getSellerId()).isEqualTo(2L);
+        assertThat(sellerId).isEqualTo(2L);
         verify(reviewRepository).save(any(Review.class));
 
         // After the review is saved, getSummary should return updated data from the repository

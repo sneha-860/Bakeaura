@@ -18,10 +18,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -67,7 +70,7 @@ public class ProductService {
 
     @Cacheable(value = "products", key = "'all'")
     public List<ProductDto> getAllProducts() {
-        return productRepository.findByIsAvailableTrue().stream()
+        return productRepository.findByIsAvailableTrue(PageRequest.of(0, 200)).stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -90,7 +93,7 @@ public class ProductService {
 
     @Cacheable(value = "products", key = "'search:' + #keyword")
     public List<ProductDto> searchProducts(String keyword) {
-        return productRepository.findByNameContainingIgnoreCase(keyword).stream()
+        return productRepository.findByNameContainingIgnoreCase(keyword, PageRequest.of(0, 100)).stream()
                 .map(this::toDto)
                 .toList();
     }
@@ -202,6 +205,16 @@ public class ProductService {
 
     public long countProductsBySeller(Long sellerId) {
         return productRepository.countBySellerId(sellerId);
+    }
+
+    public Map<Long, Long> countProductsBySellerIds(Collection<Long> sellerIds) {
+        if (sellerIds.isEmpty()) return Map.of();
+        return productRepository.countBySellerIds(sellerIds)
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]
+                ));
     }
 
     public boolean existsByCategory(Long categoryId) {

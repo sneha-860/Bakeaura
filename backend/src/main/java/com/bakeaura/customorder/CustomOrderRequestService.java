@@ -3,7 +3,9 @@ package com.bakeaura.customorder;
 import com.bakeaura.enums.CustomOrderStatus;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.map.MapService;
 import com.bakeaura.notification.NotificationService;
+import com.bakeaura.seller.SellerService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,8 @@ public class CustomOrderRequestService {
     private final CustomOrderRequestRepository customOrderRequestRepository;
     private final UserService userService;
     private final NotificationService notificationService;
+    private final SellerService sellerService;
+    private final MapService mapService;
 
     @Transactional
     public CustomOrderResponseDto submitRequest(
@@ -31,20 +35,7 @@ public class CustomOrderRequestService {
             BigDecimal budgetMin,
             BigDecimal budgetMax) {
 
-        User customer = userService.getById(customerId);
-
-        if (!Boolean.TRUE.equals(customer.getIsEmailVerified())) {
-            throw new BadRequestException("Please verify your email address before submitting a custom order request");
-        }
-
-        if (!userService.isActiveSeller(sellerId)) {
-            throw new BadRequestException("Selected seller is not a valid active seller");
-        }
-
-        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
-                customerId, sellerId, CustomOrderStatus.PENDING)) {
-            throw new BadRequestException("You already have a pending request with this seller");
-        }
+        validateRequest(customerId, sellerId);
 
         CustomOrderRequest request = new CustomOrderRequest();
         request.setCustomerId(customerId);
@@ -79,20 +70,7 @@ public class CustomOrderRequestService {
             BigDecimal budgetMin,
             BigDecimal budgetMax) {
 
-        User aiCustomer = userService.getById(customerId);
-
-        if (!Boolean.TRUE.equals(aiCustomer.getIsEmailVerified())) {
-            throw new BadRequestException("Please verify your email address before submitting a custom order request");
-        }
-
-        if (!userService.isActiveSeller(sellerId)) {
-            throw new BadRequestException("Selected seller is not a valid active seller");
-        }
-
-        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
-                customerId, sellerId, CustomOrderStatus.PENDING)) {
-            throw new BadRequestException("You already have a pending request with this seller");
-        }
+        validateRequest(customerId, sellerId);
 
         CustomOrderRequest request = new CustomOrderRequest();
         request.setCustomerId(customerId);
@@ -204,6 +182,36 @@ public class CustomOrderRequestService {
     public List<CustomOrderResponseDto> getAllRequestsForSeller(Long sellerId) {
         return customOrderRequestRepository.findBySellerIdOrderByCreatedAtDesc(sellerId)
                 .stream().map(this::toDto).toList();
+    }
+
+    private void validateRequest(Long customerId, Long sellerId) {
+        User customer = userService.getById(customerId);
+        if (!Boolean.TRUE.equals(customer.getIsEmailVerified())) {
+            throw new BadRequestException("Please verify your email address before submitting a custom order request");
+        }
+        if (!userService.isActiveSeller(sellerId)) {
+            throw new BadRequestException("Selected seller is not a valid active seller");
+        }
+        if (customOrderRequestRepository.existsByCustomerIdAndSellerIdAndStatus(
+                customerId, sellerId, CustomOrderStatus.PENDING)) {
+            throw new BadRequestException("You already have a pending request with this seller");
+        }
+        // Proximity check — enforced only when both customer and seller have set their location
+        if (customer.getLatitude() != null && customer.getLongitude() != null) {
+            User seller = userService.getById(sellerId);
+            Double radiusKm = sellerService.getDeliveryRadiusKm(sellerId);
+            if (seller.getLatitude() != null && seller.getLongitude() != null && radiusKm != null) {
+                double distance = mapService.calculateDistance(
+                        customer.getLatitude(), customer.getLongitude(),
+                        seller.getLatitude(), seller.getLongitude());
+                if (distance > radiusKm) {
+                    throw new BadRequestException(
+                            "This seller does not deliver to your area (distance: "
+                            + (int) Math.round(distance) + " km, seller delivers up to "
+                            + (int) Math.round(radiusKm) + " km)");
+                }
+            }
+        }
     }
 
     private CustomOrderRequest findAndValidateSeller(Long requestId, Long sellerId) {

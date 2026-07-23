@@ -6,6 +6,7 @@ import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import java.util.List;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.access.AccessDeniedException;
@@ -23,7 +24,7 @@ public class NotificationService {
     public List<NotificationDto> getNotifications(Long userId) {
         User user = getUser(userId);
         return notificationRepository
-                .findByUserOrderByCreatedAtDesc(user)
+                .findByUserOrderByCreatedAtDesc(user, PageRequest.of(0, 50))
                 .stream()
                 .map(this::toDto)
                 .toList();

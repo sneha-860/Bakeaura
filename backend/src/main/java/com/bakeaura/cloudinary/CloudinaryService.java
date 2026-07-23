@@ -63,11 +63,7 @@ public class CloudinaryService {
                 file.getBytes(),
                 ObjectUtils.asMap(
                         "resource_type", "image",
-                        "folder",        folderName,
-                        "transformation", ObjectUtils.asMap(
-                                "quality", "auto",
-                                "fetch_format", "auto"
-                        )
+                        "folder",        folderName
                 )
         );
     }
@@ -96,11 +92,7 @@ public class CloudinaryService {
                 imageBytes,
                 ObjectUtils.asMap(
                         "resource_type", "image",
-                        "folder",        folderName,
-                        "transformation", ObjectUtils.asMap(
-                                "quality", "auto",
-                                "fetch_format", "auto"
-                        )
+                        "folder",        folderName
                 )
         );
     }

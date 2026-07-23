@@ -124,6 +124,16 @@ public class UserService {
 
     @Transactional
     public UserDto uploadAvatar(Long userId, MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("No file provided");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BadRequestException("File must be an image (jpg, png, webp...)");
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new BadRequestException("Avatar image must be under 5 MB");
+        }
         User user = getById(userId);
         Map<String, Object> result = cloudinaryService.uploadImage(file, "bakeaura/avatars");
         user.setProfileImageUrl((String) result.get("secure_url"));

@@ -3,10 +3,12 @@ package com.bakeaura.admin;
 import com.bakeaura.common.ApiResponse;
 import com.bakeaura.enums.ApplicationStatus;
 import com.bakeaura.enums.Role;
+import com.bakeaura.referral.ReferralOrderDto;
 import com.bakeaura.roleapplication.RoleApplicationResponse;
 import com.bakeaura.roleapplication.RoleApplicationReviewRequest;
 import com.bakeaura.roleapplication.RoleApplicationService;
 import com.bakeaura.user.UserDto;
+import com.bakeaura.wallet.WalletTransactionDto;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -81,6 +83,18 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Void>> evictCategoriesCache() {
         adminService.evictCategoriesCache();
         return ResponseEntity.ok(ApiResponse.ok("Categories cache cleared", null));
+    }
+
+    @GetMapping("/influencers/{id}/wallet")
+    public ResponseEntity<ApiResponse<List<WalletTransactionDto>>> getInfluencerWallet(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok("Wallet transactions fetched",
+                adminService.getInfluencerWalletAudit(id)));
+    }
+
+    @GetMapping("/influencers/{id}/referrals")
+    public ResponseEntity<ApiResponse<List<ReferralOrderDto>>> getInfluencerReferrals(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok("Referral records fetched",
+                adminService.getInfluencerReferralAudit(id)));
     }
 
     @GetMapping("/role-applications")

@@ -3,6 +3,7 @@ package com.bakeaura.seller;
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.bakeaura.map.MapService;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.review.ReviewService;
@@ -14,7 +15,6 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.bakeaura.order.OrderRepository;
 import com.bakeaura.order.OrderService;
 import com.bakeaura.enums.OrderStatus;
 import org.springframework.data.domain.Page;
@@ -23,9 +23,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,13 +39,38 @@ public class SellerService {
     private final MapService mapService;
     private final ReviewService reviewService;
     private final OrderService orderService;
-    private final OrderRepository orderRepository;
 
     @Cacheable("sellerList")
     public List<SellerProfileDto> getSellers() {
-        return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
-                .filter(this::isShopVisible)
-                .map(this::toDto)
+        List<User> allSellers = userRepository.findByRoleAndIsActiveTrue(Role.SELLER);
+        if (allSellers.isEmpty()) return List.of();
+
+        Set<Long> ids = allSellers.stream().map(User::getId).collect(Collectors.toSet());
+
+        Map<Long, SellerProfile> profileMap = sellerProfileRepository.findAllByUserIdIn(ids)
+                .stream().collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+
+        Map<Long, Long> productCountMap = productService.countProductsBySellerIds(ids);
+
+        List<User> visible = allSellers.stream()
+                .filter(s -> {
+                    SellerProfile p = profileMap.get(s.getId());
+                    return p != null
+                            && p.getShopName() != null && !p.getShopName().isBlank()
+                            && Boolean.TRUE.equals(p.getIsOpen())
+                            && productCountMap.getOrDefault(s.getId(), 0L) > 0;
+                })
+                .toList();
+
+        if (visible.isEmpty()) return List.of();
+
+        Set<Long> visibleIds = visible.stream().map(User::getId).collect(Collectors.toSet());
+        Map<Long, ReviewSummaryDto> reviewMap = reviewService.getSummaryBatch(visibleIds);
+
+        return visible.stream()
+                .map(s -> toDtoBatch(s, profileMap.get(s.getId()),
+                        productCountMap.getOrDefault(s.getId(), 0L),
+                        reviewMap.get(s.getId())))
                 .toList();
     }
 
@@ -57,13 +83,36 @@ public class SellerService {
     }
 
     public List<SellerProfileDto> getNearbySellers(double latitude, double longitude, double radius) {
-        return userRepository.findByRoleAndIsActiveTrue(Role.SELLER).stream()
-                .filter(this::isShopVisible)
-                .filter(seller -> seller.getLatitude() != null && seller.getLongitude() != null)
-                .filter(seller -> mapService.calculateDistance(
-                        latitude, longitude,
-                        seller.getLatitude(), seller.getLongitude()) <= radius)
-                .map(this::toDto)
+        List<User> allSellers = userRepository.findByRoleAndIsActiveTrue(Role.SELLER);
+        if (allSellers.isEmpty()) return List.of();
+
+        Set<Long> ids = allSellers.stream().map(User::getId).collect(Collectors.toSet());
+        Map<Long, SellerProfile> profileMap = sellerProfileRepository.findAllByUserIdIn(ids)
+                .stream().collect(Collectors.toMap(p -> p.getUser().getId(), p -> p));
+        Map<Long, Long> productCountMap = productService.countProductsBySellerIds(ids);
+
+        List<User> visible = allSellers.stream()
+                .filter(s -> {
+                    SellerProfile p = profileMap.get(s.getId());
+                    return p != null
+                            && p.getShopName() != null && !p.getShopName().isBlank()
+                            && Boolean.TRUE.equals(p.getIsOpen())
+                            && productCountMap.getOrDefault(s.getId(), 0L) > 0
+                            && s.getLatitude() != null && s.getLongitude() != null
+                            && mapService.calculateDistance(latitude, longitude,
+                                    s.getLatitude(), s.getLongitude()) <= radius;
+                })
+                .toList();
+
+        if (visible.isEmpty()) return List.of();
+
+        Set<Long> visibleIds = visible.stream().map(User::getId).collect(Collectors.toSet());
+        Map<Long, ReviewSummaryDto> reviewMap = reviewService.getSummaryBatch(visibleIds);
+
+        return visible.stream()
+                .map(s -> toDtoBatch(s, profileMap.get(s.getId()),
+                        productCountMap.getOrDefault(s.getId(), 0L),
+                        reviewMap.get(s.getId())))
                 .toList();
     }
 
@@ -74,7 +123,7 @@ public class SellerService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (seller.getRole() != Role.SELLER) {
-            throw new BadRequestException("User is not a seller");
+            throw new AccessDeniedException("User is not a seller");
         }
 
         SellerProfile profile = sellerProfileRepository.findByUserId(userId)
@@ -96,7 +145,7 @@ public class SellerService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (seller.getRole() != Role.SELLER) {
-            throw new BadRequestException("User is not a seller");
+            throw new AccessDeniedException("User is not a seller");
         }
 
         SellerProfile profile = sellerProfileRepository.findByUserId(userId)
@@ -124,6 +173,7 @@ public class SellerService {
     }
 
     @Transactional
+    @CacheEvict(value = {"sellerProfiles", "sellerList"}, allEntries = true)
     public void createProfileForNewSeller(User user) {
         if (!sellerProfileRepository.existsByUserId(user.getId())) {
             SellerProfile profile = SellerProfile.builder()
@@ -136,16 +186,10 @@ public class SellerService {
         }
     }
 
-    // A seller appears in public listings only when: shop is open AND name is set AND at least one product.
-    private boolean isShopVisible(User seller) {
-        SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
-        if (profile == null || profile.getShopName() == null || profile.getShopName().isBlank()) {
-            return false;
-        }
-        if (!Boolean.TRUE.equals(profile.getIsOpen())) {
-            return false;
-        }
-        return productService.countProductsBySeller(seller.getId()) > 0;
+    public Double getDeliveryRadiusKm(Long sellerId) {
+        return sellerProfileRepository.findByUserId(sellerId)
+                .map(SellerProfile::getDeliveryRadiusKm)
+                .orElse(null);
     }
 
     @Transactional
@@ -159,11 +203,12 @@ public class SellerService {
 
     private SellerProfileDto toDto(User seller) {
         SellerProfile profile = sellerProfileRepository.findByUserId(seller.getId()).orElse(null);
-
         long productCount = productService.countProductsBySeller(seller.getId());
-
         ReviewSummaryDto reviewSummary = reviewService.getSummary(seller.getId());
+        return toDtoBatch(seller, profile, productCount, reviewSummary);
+    }
 
+    private SellerProfileDto toDtoBatch(User seller, SellerProfile profile, long productCount, ReviewSummaryDto reviewSummary) {
         int completeness = 0;
         if (profile != null) {
             if (profile.getShopName() != null && !profile.getShopName().isBlank()) completeness += 20;
@@ -181,8 +226,8 @@ public class SellerService {
                 .deliveryRadiusKm(profile != null ? profile.getDeliveryRadiusKm() : null)
                 .isOpen(profile != null ? profile.getIsOpen() : false)
                 .bannerImageUrl(profile != null ? profile.getBannerImageUrl() : null)
-                .totalRatings(reviewSummary.getReviewCount() != null ? reviewSummary.getReviewCount().intValue() : 0)
-                .averageRating(reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
+                .totalRatings(reviewSummary != null && reviewSummary.getReviewCount() != null ? reviewSummary.getReviewCount().intValue() : 0)
+                .averageRating(reviewSummary != null && reviewSummary.getAverageRating() != null ? reviewSummary.getAverageRating() : 0.0)
                 .productCount(productCount)
                 .profileCompleteness(completeness)
                 .build();
@@ -193,27 +238,21 @@ public class SellerService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (seller.getRole() != Role.SELLER) {
-            throw new BadRequestException("User is not a seller");
+            throw new AccessDeniedException("User is not a seller");
         }
 
         LocalDate today = LocalDate.now();
         LocalDateTime startOfMonth = today.withDayOfMonth(1).atStartOfDay();
         LocalDateTime startOfWeek = today.minusDays(today.getDayOfWeek().getValue() - 1).atStartOfDay();
 
-        BigDecimal totalRevenueAllTime = Optional.ofNullable(
-                orderRepository.sumRevenueBySellerExcludingPendingAndCancelled(sellerId))
-                .orElse(BigDecimal.ZERO);
+        BigDecimal totalRevenueAllTime = orderService.getSellerRevenueAllTime(sellerId);
 
-        BigDecimal totalRevenueThisMonth = Optional.ofNullable(
-                orderRepository.sumRevenueBySellerSince(sellerId, startOfMonth))
-                .orElse(BigDecimal.ZERO);
+        BigDecimal totalRevenueThisMonth = orderService.getSellerRevenueSince(sellerId, startOfMonth);
 
-        BigDecimal totalRevenueThisWeek = Optional.ofNullable(
-                orderRepository.sumRevenueBySellerSince(sellerId, startOfWeek))
-                .orElse(BigDecimal.ZERO);
+        BigDecimal totalRevenueThisWeek = orderService.getSellerRevenueSince(sellerId, startOfWeek);
 
-        Map<String, Long> orderCountsByStatus = orderRepository
-                .countOrdersByStatusForSeller(sellerId)
+        Map<String, Long> orderCountsByStatus = orderService
+                .getOrderCountsByStatusForSeller(sellerId)
                 .stream()
                 .collect(Collectors.toMap(
                         row -> row[0].toString(),
@@ -230,7 +269,7 @@ public class SellerService {
                 ? BigDecimal.ZERO
                 : totalRevenueAllTime.divide(BigDecimal.valueOf(revenueOrderCount), 2, RoundingMode.HALF_UP);
 
-        Page<Object[]> bestSellerPage = orderRepository.findBestSellingProductsBySeller(
+        Page<Object[]> bestSellerPage = orderService.getBestSellingProductsBySeller(
                 sellerId, PageRequest.of(0, 1));
         String bestSellingProductName = null;
         Long bestSellingProductQuantity = 0L;

@@ -29,7 +29,7 @@ public class WalletController {
 
     @GetMapping("/transactions")
     @PreAuthorize("hasRole('INFLUENCER')")
-    public ResponseEntity<ApiResponse<List<WalletTransaction>>> getTransactions(
+    public ResponseEntity<ApiResponse<List<WalletTransactionDto>>> getTransactions(
             Authentication authentication) {
         Long influencerId = Long.parseLong(authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Transactions fetched",

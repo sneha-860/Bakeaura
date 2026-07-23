@@ -71,6 +71,12 @@ public class User {
     @Column(name = "pending_email_token_expiry")
     private LocalDateTime pendingEmailTokenExpiry;
 
+    @Column(name = "reset_password_token")
+    private String resetPasswordToken;
+
+    @Column(name = "reset_password_token_expiry")
+    private LocalDateTime resetPasswordTokenExpiry;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
     // Auto-set when record is created

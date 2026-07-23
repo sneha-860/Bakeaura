@@ -10,10 +10,14 @@ import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,12 +27,50 @@ public class ReviewService {
     private final OrderService orderService;
     private final UserRepository userRepository;
 
-    public List<ReviewDto> getSellerReviews(Long sellerId) {
+    public List<ReviewDto> getSellerReviews(Long sellerId, int page, int size) {
         User seller = userRepository.findById(sellerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Seller not found"));
-        return reviewRepository.findBySellerOrderByCreatedAtDesc(seller).stream()
+        return reviewRepository.findBySellerOrderByCreatedAtDesc(seller, PageRequest.of(page, size))
+                .stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    // MAJ-08: replaces N per-seller getSummary() calls in feed ranking with one GROUP BY query
+    public Map<Long, Double> getAverageRatings(Set<Long> sellerIds) {
+        if (sellerIds.isEmpty()) return Map.of();
+        return reviewRepository.averageRatingsBatch(sellerIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Number) row[1]).doubleValue()
+                ));
+    }
+
+    // MIN-09: batch avg+count in one GROUP BY query — used by seller listings to avoid N+1
+    public Map<Long, ReviewSummaryDto> getSummaryBatch(Set<Long> sellerIds) {
+        if (sellerIds.isEmpty()) return Map.of();
+        return reviewRepository.summaryBatch(sellerIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> new ReviewSummaryDto(
+                                (Long) row[0],
+                                ((Number) row[1]).doubleValue(),
+                                (Long) row[2]
+                        )
+                ));
+    }
+
+    // MAJ-23: targeted lookup — avoids fetching all seller reviews to find one
+    @Transactional(readOnly = true)
+    public ReviewDto getMyReview(Long userId, Long orderId) {
+        User customer = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Order order = orderService.getOrderEntityById(orderId);
+        return reviewRepository.findByCustomerAndOrder(customer, order)
+                .map(this::toDto)
+                .orElse(null);
     }
 
     @Cacheable(value = "reviewSummaries", key = "#sellerId")
@@ -42,8 +84,8 @@ public class ReviewService {
     }
 
     @Transactional
-    @CacheEvict(value = "reviewSummaries", key = "#result.sellerId")
-    public ReviewDto createReview(Long userId, Long orderId, ReviewRequest request) {
+    @CacheEvict(value = "reviewSummaries", key = "#result")
+    public Long createReview(Long userId, Long orderId, ReviewRequest request) {
         User customer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -68,7 +110,8 @@ public class ReviewService {
         review.setRating(request.getRating());
         review.setComment(request.getComment());
 
-        return toDto(reviewRepository.save(review));
+        reviewRepository.save(review);
+        return order.getSeller().getId();
     }
 
     @Transactional
@@ -87,17 +130,33 @@ public class ReviewService {
         return sellerId;
     }
 
+    @Transactional
+    @CacheEvict(value = "reviewSummaries", key = "#result")
+    public Long adminDeleteReview(Long reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Review not found"));
+        Long sellerId = review.getSeller().getId();
+        reviewRepository.delete(review);
+        return sellerId;
+    }
+
     private ReviewDto toDto(Review review) {
         return new ReviewDto(
                 review.getId(),
                 review.getSeller().getId(),
-                review.getCustomer().getId(),
-                review.getCustomer().getName(),
+                anonymise(review.getCustomer().getName()),
                 review.getOrder().getId(),
                 review.getRating(),
                 review.getComment(),
-                review.getCreatedAt(),
-                review.getUpdatedAt()
+                review.getCreatedAt()
         );
+    }
+
+    // Returns "First L." to identify the reviewer without exposing their full name
+    private static String anonymise(String fullName) {
+        if (fullName == null || fullName.isBlank()) return "Customer";
+        String[] parts = fullName.trim().split("\\s+");
+        if (parts.length == 1) return parts[0];
+        return parts[0] + " " + Character.toUpperCase(parts[parts.length - 1].charAt(0)) + ".";
     }
 }

@@ -1,11 +1,13 @@
 package com.bakeaura.order;
 
 import com.bakeaura.enums.OrderStatus;
+import com.bakeaura.enums.OrderType;
 import com.bakeaura.enums.PaymentStatus;
 import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,6 +19,8 @@ public class OrderResponseDto {
     private String customerName;
     private String sellerName;
     private OrderStatus status;
+    private OrderType orderType;
+    private LocalDate scheduledDeliveryDate;
     private BigDecimal totalAmount;
     private String deliveryAddress;
     private String deliveryInstructions;

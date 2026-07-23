@@ -31,7 +31,7 @@ public class InfluencerCollaborationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Seller not found"));
 
         if (!seller.getRole().equals(Role.SELLER)) {
-            throw new BadRequestException("Only sellers can request collaborations");
+            throw new AccessDeniedException("Only sellers can request collaborations");
         }
 
         User influencer = userRepository.findById(influencerId)
@@ -64,6 +64,10 @@ public class InfluencerCollaborationService {
         return response;
     }
 
+    public long countApprovedCollaborations(Long influencerId) {
+        return collaborationRepository.countByInfluencerIdAndStatus(influencerId, CollaborationStatus.APPROVED);
+    }
+
     public List<CollaborationResponse> getMyIncomingRequests(Long influencerId) {
         return collaborationRepository
                 .findByInfluencerIdOrderByCreatedAtDesc(influencerId)
@@ -92,14 +96,6 @@ public class InfluencerCollaborationService {
                 .findFirstByInfluencerIdAndSellerIdAndStatusOrderByCreatedAtDesc(
                         influencerId, sellerId, CollaborationStatus.PENDING)
                 .orElseThrow(() -> new ResourceNotFoundException("Collaboration request not found"));
-
-        if (!collaboration.getInfluencerId().equals(influencerId)) {
-            throw new AccessDeniedException("You are not authorised to respond to this request");
-        }
-
-        if (collaboration.getStatus() != CollaborationStatus.PENDING) {
-            throw new BadRequestException("This request has already been responded to");
-        }
 
         collaboration.setStatus(newStatus);
         CollaborationResponse response = toResponse(collaborationRepository.save(collaboration));

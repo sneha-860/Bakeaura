@@ -10,11 +10,10 @@ import java.time.LocalDateTime;
 public class ReviewDto {
     private Long id;
     private Long sellerId;
-    private Long customerId;
-    private String customerName;
+    // customerId intentionally omitted — public endpoint must not expose PII
+    private String customerName;   // anonymised to "First L." in ReviewService.toDto()
     private Long orderId;
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 }

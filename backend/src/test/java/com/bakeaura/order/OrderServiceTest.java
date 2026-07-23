@@ -11,6 +11,7 @@ import com.bakeaura.notification.NotificationService;
 import com.bakeaura.notification.SmsService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
+import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.websocket.OrderTrackingService;
@@ -65,6 +66,9 @@ class OrderServiceTest {
     @Mock
     private SmsService smsService;
 
+    @Mock
+    private ReferralOrderService referralOrderService;
+
     private OrderService orderService;
 
     @BeforeEach
@@ -79,7 +83,8 @@ class OrderServiceTest {
                 orderTrackingService,
                 eventPublisher,
                 emailService,
-                smsService
+                smsService,
+                referralOrderService
         );
     }
 
@@ -224,22 +229,24 @@ class OrderServiceTest {
 
     @Test
     void sellerCanUpdateOwnOrderStatus() {
-        Order order = order(100L, user(1L, "Customer", "customer@example.com", Role.CUSTOMER), seller(), OrderStatus.PENDING);
+        // PENDING → CONFIRMED is only set by PaymentService after capture, not via updateStatus.
+        // Valid seller-driven transition: CONFIRMED → PREPARING.
+        Order order = order(100L, user(1L, "Customer", "customer@example.com", Role.CUSTOMER), seller(), OrderStatus.CONFIRMED);
         when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(order));
         when(userRepository.findById(2L)).thenReturn(Optional.of(order.getSeller()));
-        when(mapService.getEstimatedDeliveryMinutes(28.0, 77.0, 28.1, 77.1)).thenReturn(35);
         when(orderRepository.save(order)).thenReturn(order);
 
-        OrderResponseDto response = orderService.updateStatus(100L, OrderStatus.CONFIRMED, 2L);
+        OrderResponseDto response = orderService.updateStatus(100L, OrderStatus.PREPARING, 2L);
 
-        assertThat(response.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
-        assertThat(response.getEstimatedDeliveryMinutes()).isEqualTo(35);
-        verify(orderTrackingService).broadcastStatusUpdate(100L, OrderStatus.CONFIRMED);
+        assertThat(response.getStatus()).isEqualTo(OrderStatus.PREPARING);
+        verify(orderTrackingService).broadcastStatusUpdate(100L, OrderStatus.PREPARING);
         verify(notificationService).notifyUser(eq(1L), eq("ORDER_STATUS"), any(), eq(100L));
     }
 
     @Test
     void getOrderByIdRejectsUnrelatedUser() {
+        // Service throws ResourceNotFoundException (404) for unrelated users — not 403 —
+        // so as not to reveal order existence to unauthorized parties.
         Order order = order(100L, user(1L, "Customer", "customer@example.com", Role.CUSTOMER), seller(), OrderStatus.PENDING);
         User otherCustomer = user(4L, "Other", "other@example.com", Role.CUSTOMER);
 
@@ -247,8 +254,8 @@ class OrderServiceTest {
         when(userRepository.findById(4L)).thenReturn(Optional.of(otherCustomer));
 
         assertThatThrownBy(() -> orderService.getOrderById(100L, 4L))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("Access denied");
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Order not found");
     }
 
     private CreateOrderRequestDto request(Long sellerId, Long productId, int quantity) {
@@ -278,6 +285,7 @@ class OrderServiceTest {
         user.setName(name);
         user.setEmail(email);
         user.setRole(role);
+        user.setIsEmailVerified(true);
         return user;
     }
 

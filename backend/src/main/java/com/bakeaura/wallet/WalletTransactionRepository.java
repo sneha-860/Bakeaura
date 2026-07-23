@@ -12,8 +12,11 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
 
     List<WalletTransaction> findByInfluencerIdOrderByCreatedAtDesc(Long influencerId);
 
-    @Query("SELECT COALESCE(SUM(CASE WHEN w.type = :credit THEN w.amount ELSE -w.amount END), 0) " +
-            "FROM WalletTransaction w WHERE w.influencerId = :influencerId")
+    @Query("SELECT COALESCE(" +
+            "SUM(CASE WHEN w.type = :credit THEN w.amount ELSE 0 END) - " +
+            "SUM(CASE WHEN w.type = :debit THEN w.amount ELSE 0 END), " +
+            "0) FROM WalletTransaction w WHERE w.influencerId = :influencerId")
     BigDecimal calculateBalance(@Param("influencerId") Long influencerId,
-                                @Param("credit") WalletTransactionType credit);
+                                @Param("credit") WalletTransactionType credit,
+                                @Param("debit") WalletTransactionType debit);
 }

@@ -13,7 +13,6 @@ import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.exception.ServiceUnavailableException;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
-import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.notification.NotificationService;
@@ -55,7 +54,6 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final OrderService orderService;
-    private final ReferralOrderService referralOrderService;
     private final CartService cartService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -65,7 +63,6 @@ public class PaymentService {
                           UserRepository userRepository,
                           NotificationService notificationService,
                           OrderService orderService,
-                          ReferralOrderService referralOrderService,
                           CartService cartService,
                           ApplicationEventPublisher eventPublisher) {
         this.razorpayClient = razorpayClient;
@@ -74,7 +71,6 @@ public class PaymentService {
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.orderService = orderService;
-        this.referralOrderService = referralOrderService;
         this.cartService = cartService;
         this.eventPublisher = eventPublisher;
     }
@@ -231,9 +227,6 @@ public class PaymentService {
             // paymentStatus=CAPTURED on Order and calls confirmOrderAfterPayment.
             eventPublisher.publishEvent(new PaymentCapturedEvent(this, order));
 
-            // Credit referral commission now that payment is confirmed (not at order creation)
-            processReferralIfPresent(order);
-
             // Remove only this seller's items from cart — items from other sellers are preserved
             if (order.getCustomer() != null && order.getSeller() != null) {
                 cartService.clearItemsBySeller(order.getCustomer().getId(), order.getSeller().getId());
@@ -272,7 +265,9 @@ public class PaymentService {
         String razorpayOrderId = paymentEntity.getString("order_id");
         String razorpayPaymentId = paymentEntity.getString("id");
 
-        Payment payment = paymentRepository.findByRazorpayOrderId(razorpayOrderId)
+        // Pessimistic lock on the Payment row serializes concurrent verifyPayment + webhook calls.
+        // If verifyPayment committed first, this read sees CAPTURED and the guard below returns early.
+        Payment payment = paymentRepository.findWithLockByRazorpayOrderId(razorpayOrderId)
                 .orElseGet(() -> {
                     Order order = orderService.findOrderByRazorpayOrderId(razorpayOrderId);
                     return Payment.builder()
@@ -317,7 +312,6 @@ public class PaymentService {
 
         reduceStock(order);
         eventPublisher.publishEvent(new PaymentCapturedEvent(this, order));
-        processReferralIfPresent(order);
 
         // Remove only this seller's items from cart — items from other sellers are preserved
         if (order.getCustomer() != null && order.getSeller() != null) {
@@ -377,13 +371,6 @@ public class PaymentService {
                 product.setIsAvailable(false);
             }
             productService.saveProduct(product);
-        }
-    }
-
-    private void processReferralIfPresent(Order order) {
-        String code = order.getReferralCode();
-        if (code != null && !code.isBlank()) {
-            referralOrderService.processReferral(order.getId(), code, order.getTotalAmount());
         }
     }
 

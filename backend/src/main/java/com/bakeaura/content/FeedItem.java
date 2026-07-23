@@ -16,6 +16,8 @@ public class FeedItem {
     private Long likeCount;
     private Long viewCount;
     private Long commentCount;
+    private Long saveCount;
+    private Integer durationSeconds;
     private Double averageRating;
     private double score;
 }

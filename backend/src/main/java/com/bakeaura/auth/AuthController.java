@@ -82,4 +82,17 @@ public class AuthController {
         authService.resendVerificationEmail(request.getEmail());
         return ResponseEntity.ok(ApiResponse.ok("If this email exists and is unverified, a new link has been sent.", null));
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request.getEmail());
+        // Intentionally vague — never reveal whether the email exists.
+        return ResponseEntity.ok(ApiResponse.ok("If this email is registered, you will receive a reset link shortly.", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok(ApiResponse.ok("Password reset successfully. Please log in with your new password.", null));
+    }
 }

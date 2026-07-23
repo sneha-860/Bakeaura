@@ -11,14 +11,16 @@ import lombok.NoArgsConstructor;
 @Builder
 public class InfluencerPublicDto {
 
-    // Fields from User
     private Long id;
     private String name;
-    private String email;
 
-    // Fields from InfluencerProfile
+    // email deliberately omitted — public directory must not expose PII
+    private String profileImageUrl;
+    private String bio;
     private String niche;
     private String instagramUrl;
     private String youtubeUrl;
     private Integer followerCount;
+    private Long totalReferrals;
+    private String referralCode;
 }

@@ -1,13 +1,12 @@
 package com.bakeaura.referral;
 
+import com.bakeaura.influencer.InfluencerCollaborationService;
 import com.bakeaura.influencer.InfluencerProfileService;
+import com.bakeaura.notification.NotificationService;
 import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.bakeaura.enums.CollaborationStatus;
-import com.bakeaura.influencer.InfluencerCollaborationService;
-import com.bakeaura.influencer.InfluencerProfileResponse;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,6 +24,7 @@ public class ReferralOrderService {
     private final InfluencerProfileService influencerProfileService;
     private final WalletService walletService;
     private final InfluencerCollaborationService influencerCollaborationService;
+    private final NotificationService notificationService;
 
     @Transactional
     public void processReferral(Long orderId, String code, BigDecimal orderTotal) {
@@ -60,18 +60,43 @@ public class ReferralOrderService {
                 commission,
                 "Referral commission for order #" + orderId
         );
+
+        notificationService.notifyUser(
+                influencerId,
+                "REFERRAL_COMMISSION",
+                "You earned ₹" + commission + " commission from referral order #" + orderId + ".",
+                orderId
+        );
     }
 
     public List<ReferralOrder> getReferralOrdersByInfluencer(Long influencerId) {
         return referralOrderRepository.findByReferralCode_Influencer_IdOrderByCreatedAtDesc(influencerId);
     }
 
-    public InfluencerAnalyticsDto getDashboardAnalytics(Long influencerId) {
-        InfluencerProfileResponse profile = influencerProfileService.getMyProfile(influencerId);
+    public List<ReferralOrderDto> getAuditRecords(Long influencerId) {
+        return referralOrderRepository.findByReferralCode_Influencer_IdOrderByCreatedAtDesc(influencerId)
+                .stream()
+                .map(ro -> new ReferralOrderDto(
+                        ro.getId(),
+                        ro.getReferralCode().getInfluencer().getId(),
+                        ro.getReferralCode().getCode(),
+                        ro.getOrderId(),
+                        ro.getCommissionAmount(),
+                        ro.getCreatedAt()
+                ))
+                .toList();
+    }
 
+    public InfluencerAnalyticsDto getDashboardAnalytics(Long influencerId) {
         BigDecimal walletBalance = walletService.getBalance(influencerId);
 
         List<ReferralOrder> referralOrders = getReferralOrdersByInfluencer(influencerId);
+
+        // Derive total earnings from actual referral commissions — never from the stale
+        // InfluencerProfile.totalEarnings column which is never written.
+        BigDecimal totalEarnings = referralOrders.stream()
+                .map(ReferralOrder::getCommissionAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<InfluencerAnalyticsDto.RecentReferralOrder> recentOrders = referralOrders.stream()
                 .limit(10)
@@ -82,13 +107,11 @@ public class ReferralOrderService {
                         .build())
                 .toList();
 
-        long activeCollaborationsCount = influencerCollaborationService.getMyIncomingRequests(influencerId)
-                .stream()
-                .filter(c -> c.getStatus() == CollaborationStatus.APPROVED)
-                .count();
+        long activeCollaborationsCount = influencerCollaborationService
+                .countApprovedCollaborations(influencerId);
 
         return InfluencerAnalyticsDto.builder()
-                .totalEarnings(profile.getTotalEarnings())
+                .totalEarnings(totalEarnings)
                 .walletBalance(walletBalance)
                 .totalReferralOrders((long) referralOrders.size())
                 .recentReferralOrders(recentOrders)

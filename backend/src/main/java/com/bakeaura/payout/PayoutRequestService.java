@@ -6,7 +6,9 @@ import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.notification.NotificationService;
 import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -21,8 +23,8 @@ public class PayoutRequestService {
     private final WalletService walletService;
     private final NotificationService notificationService;
 
-    @Transactional
-    public PayoutRequest submitRequest(Long influencerId, BigDecimal amount, String upiId) {
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public PayoutRequestDto submitRequest(Long influencerId, BigDecimal amount, String upiId) {
         if (payoutRequestRepository.existsByInfluencerIdAndStatus(influencerId, PayoutStatus.PENDING)) {
             throw new BadRequestException("You already have a pending payout request");
         }
@@ -37,49 +39,45 @@ public class PayoutRequestService {
         request.setAmount(amount);
         request.setUpiId(upiId);
 
-        return payoutRequestRepository.save(request);
+        return toDto(payoutRequestRepository.save(request));
     }
 
+    // APPROVE: status only — no wallet debit yet. Money leaves the wallet at PAID stage
+    // when the admin confirms the bank transfer has actually happened.
     @Transactional
-    public PayoutRequest approveRequest(Long requestId, Long adminId) {
+    public PayoutRequestDto approveRequest(Long requestId, Long adminId) {
         PayoutRequest request = payoutRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Payout request not found: " + requestId));
+                .orElseThrow(() -> new ResourceNotFoundException("Payout request not found: " + requestId));
 
         if (request.getStatus() != PayoutStatus.PENDING) {
             throw new BadRequestException("Only PENDING requests can be approved");
         }
 
-        walletService.debit(
-                request.getInfluencerId(),
-                request.getAmount(),
-                "Payout approved for UPI: " + request.getUpiId()
-        );
-
         request.setStatus(PayoutStatus.APPROVED);
         request.setProcessedBy(adminId);
         request.setProcessedAt(LocalDateTime.now());
 
-        PayoutRequest saved = payoutRequestRepository.save(request);
+        PayoutRequestDto dto = toDto(payoutRequestRepository.save(request));
 
         notificationService.notifyUser(
                 request.getInfluencerId(),
                 "PAYOUT_APPROVED",
-                "Your payout request of ₹" + request.getAmount() + " has been approved and will be transferred to your UPI shortly.",
-                saved.getId()
+                "Your payout request of ₹" + request.getAmount() + " has been approved. Transfer is being processed.",
+                request.getId()
         );
 
-        return saved;
+        return dto;
     }
 
+    // REJECT: allowed from both PENDING and APPROVED. Since DEBIT only happens at PAID,
+    // rejecting an APPROVED request has no wallet side-effect — just a status change.
     @Transactional
-    public PayoutRequest rejectRequest(Long requestId, Long adminId, String note) {
+    public PayoutRequestDto rejectRequest(Long requestId, Long adminId, String note) {
         PayoutRequest request = payoutRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Payout request not found: " + requestId));
+                .orElseThrow(() -> new ResourceNotFoundException("Payout request not found: " + requestId));
 
-        if (request.getStatus() != PayoutStatus.PENDING) {
-            throw new BadRequestException("Only PENDING requests can be rejected");
+        if (request.getStatus() != PayoutStatus.PENDING && request.getStatus() != PayoutStatus.APPROVED) {
+            throw new BadRequestException("Only PENDING or APPROVED requests can be rejected");
         }
 
         request.setStatus(PayoutStatus.REJECTED);
@@ -87,57 +85,86 @@ public class PayoutRequestService {
         request.setProcessedAt(LocalDateTime.now());
         request.setAdminNote(note);
 
-        PayoutRequest saved = payoutRequestRepository.save(request);
+        PayoutRequestDto dto = toDto(payoutRequestRepository.save(request));
 
         notificationService.notifyUser(
                 request.getInfluencerId(),
                 "PAYOUT_REJECTED",
                 "Your payout request of ₹" + request.getAmount() + " was not approved." +
                         (note != null && !note.isBlank() ? " Reason: " + note : ""),
-                saved.getId()
+                request.getId()
         );
 
-        return saved;
+        return dto;
     }
 
-    @Transactional(readOnly = true)
-    public List<PayoutRequest> getHistoryForInfluencer(Long influencerId) {
-        return payoutRequestRepository.findByInfluencerIdOrderByCreatedAtDesc(influencerId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PayoutRequest> getPendingRequests() {
-        return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.PENDING);
-    }
-
-    @Transactional(readOnly = true)
-    public List<PayoutRequest> getApprovedRequests() {
-        return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.APPROVED);
-    }
-
+    // PAID: this is the only place the wallet is debited. The transfer has happened in the
+    // real world; now we record that the money has left the platform wallet.
     @Transactional
-    public PayoutRequest markAsPaid(Long requestId, Long adminId) {
+    public PayoutRequestDto markAsPaid(Long requestId, Long adminId) {
         PayoutRequest request = payoutRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Payout request not found: " + requestId));
+                .orElseThrow(() -> new ResourceNotFoundException("Payout request not found: " + requestId));
 
         if (request.getStatus() != PayoutStatus.APPROVED) {
             throw new BadRequestException("Only APPROVED requests can be marked as paid");
+        }
+
+        try {
+            walletService.debit(
+                    request.getInfluencerId(),
+                    request.getAmount(),
+                    "Payout disbursed to UPI: " + request.getUpiId()
+            );
+        } catch (IllegalStateException e) {
+            throw new BadRequestException("Cannot process payout: " + e.getMessage());
+        } catch (DataAccessException e) {
+            throw new BadRequestException("Payout could not be processed due to a concurrent transaction — please retry");
         }
 
         request.setStatus(PayoutStatus.PAID);
         request.setProcessedBy(adminId);
         request.setProcessedAt(LocalDateTime.now());
 
-        PayoutRequest saved = payoutRequestRepository.save(request);
+        PayoutRequestDto dto = toDto(payoutRequestRepository.save(request));
 
         notificationService.notifyUser(
                 request.getInfluencerId(),
                 "PAYOUT_PAID",
                 "₹" + request.getAmount() + " has been transferred to your UPI account.",
-                saved.getId()
+                request.getId()
         );
 
-        return saved;
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public List<PayoutRequestDto> getHistoryForInfluencer(Long influencerId) {
+        return payoutRequestRepository.findByInfluencerIdOrderByCreatedAtDesc(influencerId)
+                .stream().map(this::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PayoutRequestDto> getPendingRequests() {
+        return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.PENDING)
+                .stream().map(this::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PayoutRequestDto> getApprovedRequests() {
+        return payoutRequestRepository.findByStatusOrderByCreatedAtAsc(PayoutStatus.APPROVED)
+                .stream().map(this::toDto).toList();
+    }
+
+    private PayoutRequestDto toDto(PayoutRequest p) {
+        return new PayoutRequestDto(
+                p.getId(),
+                p.getInfluencerId(),
+                p.getAmount(),
+                p.getStatus().name(),
+                p.getUpiId(),
+                p.getAdminNote(),
+                p.getProcessedAt(),
+                p.getCreatedAt()
+        );
     }
 }

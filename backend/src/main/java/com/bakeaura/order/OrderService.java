@@ -1,6 +1,7 @@
 package com.bakeaura.order;
 
 import com.bakeaura.map.MapService;
+import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.cart.CartDto;
 import com.bakeaura.cart.CartItemDto;
 import com.bakeaura.cart.CartService;
@@ -33,7 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,6 +54,7 @@ public class OrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final EmailService emailService;
     private final SmsService smsService;
+    private final ReferralOrderService referralOrderService;
 
     @Transactional
     public OrderResponseDto createOrder(CreateOrderRequestDto request, Long customerId) {
@@ -270,6 +274,15 @@ public class OrderService {
                 orderId
         );
 
+        // Credit referral commission only when the order is delivered — not at payment capture.
+        // DELIVERED is a terminal state so commission can never need reversal after this point.
+        if (newStatus == OrderStatus.DELIVERED
+                && updated.getReferralCode() != null
+                && !updated.getReferralCode().isBlank()) {
+            referralOrderService.processReferral(
+                    updated.getId(), updated.getReferralCode(), updated.getTotalAmount());
+        }
+
         // Fire refund check after the order is saved so PaymentService sees the CANCELLED state.
         if (newStatus == OrderStatus.CANCELLED) {
             eventPublisher.publishEvent(new OrderCancelledEvent(this, updated));
@@ -358,6 +371,13 @@ public class OrderService {
     public Order getOrderEntityById(Long orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+    }
+
+    public boolean isOrderParticipant(Long orderId, Long userId) {
+        return orderRepository.findById(orderId)
+                .map(o -> (o.getCustomer() != null && o.getCustomer().getId().equals(userId))
+                        || (o.getSeller() != null && o.getSeller().getId().equals(userId)))
+                .orElse(false);
     }
 
     public Order findOrderByRazorpayOrderId(String razorpayOrderId) {
@@ -485,6 +505,8 @@ public class OrderService {
                 .customerName(order.getCustomer().getName())
                 .sellerName(order.getSeller().getName())
                 .status(order.getStatus())
+                .orderType(order.getOrderType())
+                .scheduledDeliveryDate(order.getScheduledDeliveryDate())
                 .paymentStatus(paymentStatus)
                 .totalAmount(order.getTotalAmount())
                 .deliveryAddress(order.getDeliveryAddress())
@@ -494,5 +516,23 @@ public class OrderService {
                 .items(itemResponses)
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    public BigDecimal getSellerRevenueAllTime(Long sellerId) {
+        return Optional.ofNullable(orderRepository.sumRevenueBySellerExcludingPendingAndCancelled(sellerId))
+                .orElse(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getSellerRevenueSince(Long sellerId, LocalDateTime since) {
+        return Optional.ofNullable(orderRepository.sumRevenueBySellerSince(sellerId, since))
+                .orElse(BigDecimal.ZERO);
+    }
+
+    public List<Object[]> getOrderCountsByStatusForSeller(Long sellerId) {
+        return orderRepository.countOrdersByStatusForSeller(sellerId);
+    }
+
+    public Page<Object[]> getBestSellingProductsBySeller(Long sellerId, Pageable pageable) {
+        return orderRepository.findBestSellingProductsBySeller(sellerId, pageable);
     }
 }

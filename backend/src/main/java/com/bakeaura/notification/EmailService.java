@@ -70,6 +70,30 @@ public class EmailService {
     }
 
     @Async
+    public void sendPasswordResetEmail(String toEmail, String token) {
+        String subject = "Reset your Bakeaura password";
+        String resetLink = frontendUrl + "/reset-password?token=" + token;
+        String body = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head>"
+            + "<body style='margin:0;padding:0;background:#FAF6F1;font-family:Helvetica,Arial,sans-serif;'>"
+            + "<div style='max-width:560px;margin:40px auto;background:#FFFDF9;border-radius:16px;overflow:hidden;border:1px solid #E8D9C8;'>"
+            + "<div style='background:#2C1810;padding:24px 32px;'>"
+            + "<span style='display:inline-block;width:36px;height:36px;border-radius:50%;background:#C0603A;color:#fff;font-family:Georgia,serif;font-size:1.1rem;font-weight:bold;line-height:36px;text-align:center;'>B</span>"
+            + "<span style='color:#FAF6F1;font-size:1.15rem;font-weight:700;margin-left:10px;vertical-align:middle;letter-spacing:0.01em;'>Bakeaura</span>"
+            + "</div>"
+            + "<div style='padding:40px 32px;'>"
+            + "<h1 style='margin:0 0 12px;font-size:1.4rem;color:#2C1810;font-family:Georgia,serif;font-weight:700;'>Reset your password</h1>"
+            + "<p style='margin:0 0 28px;color:#6f625c;font-size:0.95rem;line-height:1.7;'>We received a request to reset your Bakeaura password. Click the button below to choose a new one. This link expires in <strong style='color:#2C1810;'>1 hour</strong>.</p>"
+            + "<a href='" + resetLink + "' style='display:inline-block;background:#C0603A;color:#ffffff;text-decoration:none;padding:14px 30px;border-radius:8px;font-weight:600;font-size:0.95rem;letter-spacing:0.02em;'>Reset my password</a>"
+            + "<p style='margin:28px 0 0;color:#6f625c;font-size:0.8rem;line-height:1.6;'>Or copy and paste this link into your browser:<br><a href='" + resetLink + "' style='color:#C0603A;word-break:break-all;'>" + resetLink + "</a></p>"
+            + "<hr style='margin:28px 0;border:none;border-top:1px solid #E8D9C8;'>"
+            + "<p style='margin:0;color:#6f625c;font-size:0.8rem;line-height:1.5;'>If you did not request a password reset you can safely ignore this email — your password will not be changed.</p>"
+            + "</div>"
+            + "</div>"
+            + "</body></html>";
+        sendEmail(toEmail, subject, body);
+    }
+
+    @Async
     public void sendEmailChangeVerification(String toEmail, String token) {
         String subject = "Confirm your new email - Bakeaura";
         String verificationLink = baseUrl + "/api/auth/verify-email-change?token=" + token;

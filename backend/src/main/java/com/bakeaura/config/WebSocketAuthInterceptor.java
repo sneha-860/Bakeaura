@@ -33,8 +33,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
 
-    private static final Pattern USER_TOPIC = Pattern.compile("^/topic/users/(\\d+)/.*$");
+    private static final Pattern USER_TOPIC  = Pattern.compile("^/topic/users/(\\d+)/.*$");
     private static final Pattern ORDER_TOPIC = Pattern.compile("^/topic/order/(\\d+)$");
+    private static final Pattern REEL_TOPIC  = Pattern.compile("^/topic/reels/(\\d+)$");
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -56,6 +57,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 throw new IllegalArgumentException("Invalid or expired token");
             }
             Long userId = jwtUtil.extractUserId(token);
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+                log.warn("WebSocket CONNECT rejected: user {} is inactive or not found", userId);
+                throw new IllegalArgumentException("Account is inactive");
+            }
             Principal principal = new UsernamePasswordAuthenticationToken(
                     userId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
             accessor.setUser(principal);
@@ -78,6 +84,24 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 if (!subscriberId.equals(topicUserId)) {
                     log.warn("User {} attempted to subscribe to notifications for user {}", subscriberId, topicUserId);
                     throw new IllegalArgumentException("Not authorised to subscribe to another user's notifications");
+                }
+            }
+
+            Matcher reelTopicMatcher = REEL_TOPIC.matcher(destination);
+            if (reelTopicMatcher.matches()) {
+                Long topicSellerId = Long.parseLong(reelTopicMatcher.group(1));
+                if (user == null) {
+                    log.warn("Unauthenticated subscription attempt to {}", destination);
+                    throw new IllegalArgumentException("Authentication required to subscribe to reel processing status");
+                }
+                Long subscriberId = Long.parseLong(user.getName());
+                boolean isOwner = subscriberId.equals(topicSellerId);
+                boolean isAdmin = userRepository.findById(subscriberId)
+                        .map(u -> u.getRole() == Role.ADMIN)
+                        .orElse(false);
+                if (!isOwner && !isAdmin) {
+                    log.warn("User {} attempted to subscribe to reel processing topic for seller {}", subscriberId, topicSellerId);
+                    throw new IllegalArgumentException("Not authorised to subscribe to another seller's reel processing status");
                 }
             }
 

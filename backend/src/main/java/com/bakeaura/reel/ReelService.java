@@ -9,12 +9,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,9 +29,12 @@ import java.util.stream.Collectors;
 public class ReelService {
 
     private final ReelRepository reelRepository;
+    private final ReelLikeRepository reelLikeRepository;
+    private final ReelSaveRepository reelSaveRepository;
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public ReelResponseDTO initiateUpload(String caption, Long sellerId) {
         User seller = userRepository.findById(sellerId)
@@ -45,8 +52,14 @@ public class ReelService {
 
     @Async
     public void processVideoUpload(Long reelId, MultipartFile videoFile) {
-        Reel reel = reelRepository.findById(reelId)
+        // JOIN FETCH loads the seller eagerly so seller.getName() is available in memory
+        // after the JPA session closes. findById() (lazy) would throw LazyInitializationException
+        // when toResponseDTO() accesses seller.getName() later in this async thread.
+        Reel reel = reelRepository.findByIdWithSeller(reelId)
                 .orElseThrow(() -> new RuntimeException("Reel not found: " + reelId));
+
+        // Capture seller ID before any try/catch — always safe, ID is on the FK column.
+        Long sellerId = reel.getSeller().getId();
 
         try {
             log.info("Starting async Cloudinary upload for reel ID: {}", reelId);
@@ -75,21 +88,45 @@ public class ReelService {
 
             log.info("Reel ID: {} is now ACTIVE. URL: {}", reelId, reel.getVideoUrl());
 
-            messagingTemplate.convertAndSend(
-                    "/topic/reels/" + reel.getSeller().getId(),
-                    toResponseDTO(reel)
-            );
+            messagingTemplate.convertAndSend("/topic/reels/" + sellerId, toResponseDTO(reel));
 
         } catch (Exception e) {
             log.error("Failed to process reel ID: {}", reelId, e);
             reel.setStatus(Reel.ReelStatus.FAILED);
             reelRepository.save(reel);
 
-            messagingTemplate.convertAndSend(
-                    "/topic/reels/" + reel.getSeller().getId(),
-                    Map.of("reelId", reelId, "status", "FAILED", "error", e.getMessage())
-            );
+            // Same DTO format as the success case — frontend checks updatedReel.id and
+            // updatedReel.status. The old Map.of("reelId", ...) used the wrong key and
+            // was silently ignored by the frontend listener.
+            messagingTemplate.convertAndSend("/topic/reels/" + sellerId, toResponseDTO(reel));
         }
+    }
+
+    @Transactional
+    public void deleteReel(Long reelId, Long requestingUserId, boolean isAdmin) {
+        Reel reel = reelRepository.findById(reelId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reel not found"));
+
+        if (!isAdmin && !reel.getSeller().getId().equals(requestingUserId)) {
+            throw new AccessDeniedException("You can only delete your own reels");
+        }
+
+        String publicId = reel.getCloudinaryPublicId();
+        if (publicId != null && !publicId.isBlank()) {
+            try {
+                cloudinaryService.deleteFile(publicId, "video");
+            } catch (IOException e) {
+                log.warn("Cloudinary delete failed for reel {} (public_id: {}); continuing with DB delete. Cause: {}",
+                        reelId, publicId, e.getMessage());
+            }
+        }
+
+        // Delete interaction rows before the reel — reel_likes and reel_saves store
+        // reel_id as a plain Long (no FK), so there is no DB cascade to rely on.
+        reelLikeRepository.deleteAllByReelId(reelId);
+        reelSaveRepository.deleteAllByReelId(reelId);
+        reelRepository.deleteById(reelId);
+        log.info("Deleted reel ID: {} by seller ID: {}", reelId, requestingUserId);
     }
 
     public Page<ReelResponseDTO> getActiveFeed(int page, int size) {
@@ -101,22 +138,66 @@ public class ReelService {
     }
 
     @Transactional
-    public void incrementViewCount(Long reelId) {
+    public void incrementViewCount(Long reelId, Long userId) {
+        String dedupKey = "reel:view:" + reelId + ":" + userId;
+        Boolean alreadyViewed = redisTemplate.hasKey(dedupKey);
+        if (Boolean.TRUE.equals(alreadyViewed)) {
+            return;
+        }
         reelRepository.incrementViewCount(reelId);
+        redisTemplate.opsForValue().set(dedupKey, "1", Duration.ofHours(24));
     }
 
     @Transactional
-    public void incrementLikeCount(Long reelId) {
-        reelRepository.incrementLikeCount(reelId);
+    public void likeReel(Long reelId, Long userId) {
+        if (!reelLikeRepository.existsByReelIdAndUserId(reelId, userId)) {
+            ReelLike like = new ReelLike();
+            like.setReelId(reelId);
+            like.setUserId(userId);
+            reelLikeRepository.save(like);
+            reelRepository.incrementLikeCount(reelId);
+        }
     }
 
     @Transactional
-    public void incrementSaveCount(Long reelId) {
-        reelRepository.incrementSaveCount(reelId);
+    public void saveReel(Long reelId, Long userId) {
+        if (!reelSaveRepository.existsByReelIdAndUserId(reelId, userId)) {
+            ReelSave save = new ReelSave();
+            save.setReelId(reelId);
+            save.setUserId(userId);
+            reelSaveRepository.save(save);
+            reelRepository.incrementSaveCount(reelId);
+        }
     }
 
-    public List<Reel> getAllActiveReels() {
-        return reelRepository.findAllActive();
+    @Transactional
+    public void unlikeReel(Long reelId, Long userId) {
+        if (reelLikeRepository.existsByReelIdAndUserId(reelId, userId)) {
+            reelLikeRepository.deleteByReelIdAndUserId(reelId, userId);
+            reelRepository.decrementLikeCount(reelId);
+        }
+    }
+
+    @Transactional
+    public void unsaveReel(Long reelId, Long userId) {
+        if (reelSaveRepository.existsByReelIdAndUserId(reelId, userId)) {
+            reelSaveRepository.deleteByReelIdAndUserId(reelId, userId);
+            reelRepository.decrementSaveCount(reelId);
+        }
+    }
+
+    public List<Reel> getAllActiveReels(int limit) {
+        return reelRepository.findAllActive(PageRequest.of(0, limit));
+    }
+
+    public List<Reel> getActiveReelsForSeller(Long sellerId, int limit) {
+        return reelRepository.findActiveBySellerIdWithLimit(sellerId, PageRequest.of(0, limit));
+    }
+
+    public ReelResponseDTO getReelById(Long reelId) {
+        Reel reel = reelRepository.findById(reelId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reel not found"));
+        return toResponseDTO(reel);
     }
 
     public List<ReelResponseDTO> getSellerReels(Long sellerId) {

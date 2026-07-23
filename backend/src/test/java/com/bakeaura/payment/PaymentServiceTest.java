@@ -6,12 +6,12 @@ import com.bakeaura.enums.Role;
 import com.bakeaura.exception.BadRequestException;
 import com.bakeaura.order.Order;
 import com.bakeaura.order.OrderItem;
-import com.bakeaura.order.OrderRepository;
+import com.bakeaura.order.OrderService;
 import com.bakeaura.product.Product;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
-import com.bakeaura.websocket.OrderTrackingService;
+import com.bakeaura.cart.CartService;
 import com.bakeaura.notification.NotificationService;
 import com.razorpay.RazorpayClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.crypto.Mac;
@@ -39,13 +40,16 @@ class PaymentServiceTest {
     private PaymentRepository paymentRepository;
 
     @Mock
-    private OrderRepository orderRepository;
+    private OrderService orderService;
 
     @Mock
     private ProductService productService;
 
     @Mock
-    private OrderTrackingService orderTrackingService;
+    private CartService cartService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private RazorpayClient razorpayClient;
@@ -63,11 +67,12 @@ class PaymentServiceTest {
         paymentService = new PaymentService(
                 razorpayClient,
                 paymentRepository,
-                orderRepository,
                 productService,
                 userRepository,
-                orderTrackingService,
-                notificationService
+                notificationService,
+                orderService,
+                cartService,
+                eventPublisher
         );
         ReflectionTestUtils.setField(paymentService, "webhookSecret", "test_secret");
     }
@@ -86,7 +91,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    void capturedPaymentReducesStockConfirmsOrderAndBroadcastsStatus() {
+    void capturedWebhookReducesStockAndPublishesEvent() {
         Order order = orderWithProductStock(5);
         Payment payment = Payment.builder()
                 .order(order)
@@ -96,7 +101,7 @@ class PaymentServiceTest {
                 .build();
         String payload = capturedPayload();
 
-        when(paymentRepository.findByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findWithLockByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
 
         paymentService.handleWebhook(payload, signature(payload));
 
@@ -105,10 +110,10 @@ class PaymentServiceTest {
         assertThat(payment.getRazorpayPaymentId()).isEqualTo("pay_123");
         assertThat(payment.getRazorpaySignature()).isEqualTo(signature(payload));
         assertThat(product.getStockQuantity()).isEqualTo(3);
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         verify(productService).saveProduct(product);
-        verify(orderRepository).save(order);
-        verify(orderTrackingService).broadcastStatusUpdate(1L, OrderStatus.CONFIRMED);
+        verify(paymentRepository).save(payment);
+        // Order confirmation is handled by OrderService via the PaymentCapturedEvent, not directly
+        verify(eventPublisher).publishEvent(any(PaymentCapturedEvent.class));
     }
 
     @Test
@@ -122,21 +127,19 @@ class PaymentServiceTest {
                 .build();
         String payload = capturedPayload();
 
-        when(paymentRepository.findByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findWithLockByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
 
         paymentService.handleWebhook(payload, signature(payload));
 
         Product product = order.getItems().get(0).getProduct();
         assertThat(product.getStockQuantity()).isEqualTo(5);
         verify(productService, never()).saveProduct(any());
-        verify(orderRepository, never()).save(any());
-        verifyNoInteractions(orderTrackingService);
+        verify(paymentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void webhookIdempotencyKeepsPaymentAndOrderStateIntact() {
-        // Proves all state (payment status, order status, stock, all repository writes) is frozen
-        // when the same payment.captured webhook arrives a second time; HMAC-SHA256 is verified on both calls
         Order order = orderWithProductStock(5);
         order.setStatus(OrderStatus.CONFIRMED);
         Payment payment = Payment.builder()
@@ -147,7 +150,7 @@ class PaymentServiceTest {
                 .build();
         String payload = capturedPayload();
 
-        when(paymentRepository.findByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
+        when(paymentRepository.findWithLockByRazorpayOrderId("order_razorpay")).thenReturn(Optional.of(payment));
 
         paymentService.handleWebhook(payload, signature(payload));
 
@@ -156,8 +159,7 @@ class PaymentServiceTest {
         assertThat(order.getItems().get(0).getProduct().getStockQuantity()).isEqualTo(5);
         verify(paymentRepository, never()).save(any());
         verify(productService, never()).saveProduct(any());
-        verify(orderRepository, never()).save(any());
-        verifyNoInteractions(orderTrackingService);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -168,7 +170,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    void failedPaymentMarksPaymentFailedAndCancelsOrder() {
+    void failedWebhookMarksPaymentFailedAndDelegatesCancellationToOrderService() {
         Order order = orderWithProductStock(5);
         Payment payment = Payment.builder()
                 .order(order)
@@ -184,10 +186,9 @@ class PaymentServiceTest {
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(payment.getRazorpayPaymentId()).isEqualTo("pay_failed");
-        assertThat(payment.getRazorpaySignature()).isEqualTo(signature(payload));
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(paymentRepository).save(payment);
-        verify(orderRepository).save(order);
+        // Order cancellation is delegated to OrderService, not done directly
+        verify(orderService).markOrderCancelledByPaymentFailure(order);
     }
 
     @Test
@@ -209,7 +210,7 @@ class PaymentServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CAPTURED);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CONFIRMED);
         verify(paymentRepository, never()).save(any());
-        verify(orderRepository, never()).save(any());
+        verify(orderService, never()).markOrderCancelledByPaymentFailure(any());
     }
 
     @Test
@@ -223,7 +224,7 @@ class PaymentServiceTest {
 
         paymentService.handleWebhook(payload, signature(payload));
 
-        verifyNoInteractions(paymentRepository, orderRepository, productService, orderTrackingService);
+        verifyNoInteractions(paymentRepository, orderService, productService, cartService, eventPublisher);
     }
 
     @Test
@@ -326,9 +327,7 @@ class PaymentServiceTest {
             StringBuilder hex = new StringBuilder();
             for (byte b : hash) {
                 String value = Integer.toHexString(0xff & b);
-                if (value.length() == 1) {
-                    hex.append('0');
-                }
+                if (value.length() == 1) hex.append('0');
                 hex.append(value);
             }
             return hex.toString();

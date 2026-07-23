@@ -2,10 +2,13 @@ package com.bakeaura.seller;
 
 import com.bakeaura.common.ApiResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +16,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/sellers")
 @RequiredArgsConstructor
+@Validated
 public class SellerController {
 
     private final SellerService sellerService;
@@ -26,7 +30,10 @@ public class SellerController {
     public ResponseEntity<ApiResponse<List<SellerProfileDto>>> getNearbySellers(
             @RequestParam double latitude,
             @RequestParam double longitude,
-            @RequestParam(defaultValue = "10.0") double radius) {
+            @RequestParam(defaultValue = "10.0")
+            @DecimalMin(value = "0.5", message = "Radius must be at least 0.5 km")
+            @DecimalMax(value = "100.0", message = "Radius cannot exceed 100 km")
+            double radius) {
         return ResponseEntity.ok(ApiResponse.ok("Nearby sellers fetched",
                 sellerService.getNearbySellers(latitude, longitude, radius)));
     }

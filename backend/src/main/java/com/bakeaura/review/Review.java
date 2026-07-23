@@ -3,10 +3,11 @@ package com.bakeaura.review;
 import com.bakeaura.order.Order;
 import com.bakeaura.user.User;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -32,6 +33,7 @@ public class Review {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
+    @Min(1) @Max(5)
     @Column(nullable = false)
     private Integer rating;
 
@@ -40,7 +42,4 @@ public class Review {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
 }

@@ -7,6 +7,7 @@ import com.bakeaura.exception.ResourceNotFoundException;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartService {
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -36,19 +38,27 @@ public class CartService {
 
     public CartDto getCartWithoutSync(Long userId) {
         User user = getUserById(userId);
-        Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
-        if (cached instanceof CartDto cart) {
-            return cart;
+        try {
+            Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
+            if (cached instanceof CartDto cart) {
+                return cart;
+            }
+        } catch (Exception e) {
+            log.warn("Redis unavailable, returning empty cart for user {}", user.getId());
         }
         return new CartDto(user.getEmail(), new java.util.ArrayList<>());
     }
 
     private CartDto getCartForUser(User user) {
-        Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
-        if (cached instanceof CartDto cart) {
-            CartDto syncedCart = syncCartWithProducts(user.getEmail(), cart);
-            saveCart(user, syncedCart);
-            return syncedCart;
+        try {
+            Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
+            if (cached instanceof CartDto cart) {
+                CartDto syncedCart = syncCartWithProducts(user.getEmail(), cart);
+                saveCart(user, syncedCart);
+                return syncedCart;
+            }
+        } catch (Exception e) {
+            log.warn("Redis unavailable, returning empty cart for user {}", user.getId());
         }
         return new CartDto(user.getEmail(), new java.util.ArrayList<>());
     }
@@ -122,28 +132,40 @@ public class CartService {
 
     public void clearCart(Long userId) {
         User user = getUserById(userId);
-        redisTemplate.delete(cartKey(user.getId()));
+        try {
+            redisTemplate.delete(cartKey(user.getId()));
+        } catch (Exception e) {
+            log.warn("Redis unavailable, cart clear skipped for user {}", user.getId());
+        }
     }
 
     // Called after payment is captured — removes only the paid seller's items.
     // Items from other sellers remain so the customer can check out separately.
     public void clearItemsBySeller(Long userId, Long sellerId) {
         User user = getUserById(userId);
-        Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
-        if (!(cached instanceof CartDto cart)) {
-            return;
-        }
-        cart.getItems().removeIf(item -> sellerId.equals(item.getSellerId()));
-        if (cart.getItems().isEmpty()) {
-            redisTemplate.delete(cartKey(user.getId()));
-        } else {
-            saveCart(user, cart);
+        try {
+            Object cached = redisTemplate.opsForValue().get(cartKey(user.getId()));
+            if (!(cached instanceof CartDto cart)) {
+                return;
+            }
+            cart.getItems().removeIf(item -> sellerId.equals(item.getSellerId()));
+            if (cart.getItems().isEmpty()) {
+                redisTemplate.delete(cartKey(user.getId()));
+            } else {
+                saveCart(user, cart);
+            }
+        } catch (Exception e) {
+            log.warn("Redis unavailable, cart seller-clear skipped for user {}", user.getId());
         }
     }
 
     private void saveCart(User user, CartDto cart) {
-        cart.setUserEmail(user.getEmail());
-        redisTemplate.opsForValue().set(cartKey(user.getId()), cart, CART_TTL);
+        try {
+            cart.setUserEmail(user.getEmail());
+            redisTemplate.opsForValue().set(cartKey(user.getId()), cart, CART_TTL);
+        } catch (Exception e) {
+            log.warn("Redis unavailable, cart not persisted for user {}", user.getId());
+        }
     }
 
     private User getUserById(Long userId) {

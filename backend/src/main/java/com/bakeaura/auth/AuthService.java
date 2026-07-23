@@ -27,13 +27,14 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
 
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
             throw new BadRequestException("Email is already registered");
         }
 
         User user = new User();
         user.setName(request.getName());
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(Role.CUSTOMER);
         user.setIsActive(true);
@@ -70,7 +71,7 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
                 .orElseThrow(() -> new BadRequestException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -179,9 +180,41 @@ public class AuthService {
     }
 
     @Transactional
+    public void forgotPassword(String email) {
+        // Never reveal whether the email exists — prevents user enumeration attacks.
+        // The ifPresent block fires only if the user is found; silent no-op otherwise.
+        userRepository.findByEmail(email.trim().toLowerCase()).ifPresent(user -> {
+            String token = UUID.randomUUID().toString();
+            user.setResetPasswordToken(token);
+            user.setResetPasswordTokenExpiry(LocalDateTime.now().plusHours(1));
+            userRepository.save(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), token);
+        });
+    }
+
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        User user = userRepository.findByResetPasswordToken(token)
+                .orElseThrow(() -> new BadRequestException("This reset link is invalid or has already been used."));
+
+        if (user.getResetPasswordTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("This reset link has expired. Please request a new one.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        // Clear the token immediately — it is single-use.
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpiry(null);
+        userRepository.save(user);
+
+        // Revoke all active refresh tokens so old sessions cannot continue after a password change.
+        refreshTokenStore.revoke(user.getId());
+    }
+
+    @Transactional
     public void resendVerificationEmail(String email) {
         log.info("Resend verification requested for: {}", email);
-        userRepository.findByEmail(email).ifPresent(user -> {
+        userRepository.findByEmail(email.trim().toLowerCase()).ifPresent(user -> {
             if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
                 log.info("Resend skipped — account already verified: {}", email);
                 return;

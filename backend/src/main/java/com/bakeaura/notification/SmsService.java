@@ -5,8 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.*;
 
 @Service
 @RequiredArgsConstructor
@@ -42,28 +46,34 @@ public class SmsService {
 
     private void sendSms(String phone, String message) {
         try {
-            String url = "https://www.fast2sms.com/dev/bulkV2" +
-                    "?authorization=" + apiKey +
-                    "&numbers=" + phone +
-                    "&route=q" +
-                    "&message=" + message;
-
             HttpHeaders headers = new HttpHeaders();
+            // API key goes in the header — never in the URL where it would appear in access logs
+            headers.set("authorization", apiKey);
             headers.set("cache-control", "no-cache");
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            // Phone number and message go in the POST body — never in the URL
+            String body = String.format(
+                    "{\"numbers\":\"%s\",\"route\":\"q\",\"message\":\"%s\"}",
+                    phone,
+                    message.replace("\"", "\\\"")
+            );
+
+            HttpEntity<String> entity = new HttpEntity<>(body, headers);
 
             ResponseEntity<String> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
+                    "https://www.fast2sms.com/dev/bulkV2",
+                    HttpMethod.POST,
                     entity,
                     String.class
             );
 
-            log.info("SMS sent to {} — response: {}", phone, response.getBody());
+            // Log only the HTTP status — never log phone numbers
+            log.info("SMS dispatched — status: {}", response.getStatusCode());
 
         } catch (Exception e) {
-            log.error("Failed to send SMS to {}: {}", phone, e.getMessage());
+            // Don't log the exception message if it might echo the phone number back
+            log.error("Failed to send SMS — check Fast2SMS credentials and phone format");
         }
     }
 }

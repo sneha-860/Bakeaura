@@ -10,19 +10,27 @@ import com.bakeaura.order.OrderService;
 import com.bakeaura.payment.PaymentService;
 import com.bakeaura.product.ProductService;
 import com.bakeaura.referral.ReferralCodeService;
+import com.bakeaura.referral.ReferralOrderDto;
+import com.bakeaura.referral.ReferralOrderService;
 import com.bakeaura.seller.SellerService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserDto;
 import com.bakeaura.user.UserRepository;
 import com.bakeaura.user.UserService;
+import com.bakeaura.wallet.WalletService;
+import com.bakeaura.wallet.WalletTransactionDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminService {
     private final UserRepository userRepository;
     private final UserService userService;
@@ -33,6 +41,8 @@ public class AdminService {
     private final SellerService sellerService;
     private final InfluencerProfileService influencerProfileService;
     private final ReferralCodeService referralCodeService;
+    private final WalletService walletService;
+    private final ReferralOrderService referralOrderService;
     private final RefreshTokenStore refreshTokenStore;
 
     public AdminDashboardDto dashboard() {
@@ -61,6 +71,7 @@ public class AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setIsActive(request.getActive());
         userRepository.save(user);
+        log.info("AUDIT: admin {} set user {} isActive={}", adminId, targetId, request.getActive());
         // Revoke refresh token so the deactivated user cannot silently extend their session.
         // Their current access token (≤15 min TTL) will still work until it expires — acceptable.
         if (!Boolean.TRUE.equals(request.getActive())) {
@@ -85,6 +96,7 @@ public class AdminService {
         Role previousRole = user.getRole();
         user.setRole(role);
         userRepository.save(user);
+        log.info("AUDIT: admin {} changed user {} role from {} to {}", adminId, targetId, previousRole, role);
 
         if (role == Role.SELLER && previousRole != Role.SELLER) {
             sellerService.createProfileForNewSeller(user);
@@ -103,6 +115,14 @@ public class AdminService {
         categoryService.evictCategoriesCache();
     }
 
+    public List<WalletTransactionDto> getInfluencerWalletAudit(Long influencerId) {
+        return walletService.getTransactionHistory(influencerId);
+    }
+
+    public List<ReferralOrderDto> getInfluencerReferralAudit(Long influencerId) {
+        return referralOrderService.getAuditRecords(influencerId);
+    }
+
     // Deactivates the user rather than hard-deleting, preserving order history and referential
     // integrity. The user is blocked from logging in immediately (login validates isActive).
     @Transactional
@@ -118,5 +138,6 @@ public class AdminService {
         target.setIsActive(false);
         userRepository.save(target);
         refreshTokenStore.revoke(targetId);
+        log.info("AUDIT: admin {} deactivated user {}", adminId, targetId);
     }
 }

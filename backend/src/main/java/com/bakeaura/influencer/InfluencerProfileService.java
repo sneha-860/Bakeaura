@@ -2,8 +2,10 @@ package com.bakeaura.influencer;
 
 import com.bakeaura.enums.Role;
 import com.bakeaura.exception.ResourceNotFoundException;
+import com.bakeaura.referral.ReferralCodeService;
 import com.bakeaura.user.User;
 import com.bakeaura.user.UserRepository;
+import com.bakeaura.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,8 @@ public class InfluencerProfileService {
 
     private final InfluencerProfileRepository influencerProfileRepository;
     private final UserRepository userRepository;
+    private final WalletService walletService;
+    private final ReferralCodeService referralCodeService;
 
     public List<InfluencerPublicDto> getInfluencers() {
         return userRepository.findByRoleAndIsActiveTrue(Role.INFLUENCER).stream()
@@ -33,14 +37,18 @@ public class InfluencerProfileService {
 
     private InfluencerPublicDto toPublicDto(User user) {
         InfluencerProfile profile = influencerProfileRepository.findByUserId(user.getId()).orElse(null);
+        String activeCode = referralCodeService.getActiveCodeByInfluencerId(user.getId());
         return InfluencerPublicDto.builder()
                 .id(user.getId())
                 .name(user.getName())
-                .email(user.getEmail())
+                .profileImageUrl(user.getProfileImageUrl())
+                .bio(user.getBio())
                 .niche(profile != null ? profile.getNiche() : null)
                 .instagramUrl(profile != null ? profile.getInstagramUrl() : null)
                 .youtubeUrl(profile != null ? profile.getYoutubeUrl() : null)
                 .followerCount(profile != null ? profile.getFollowerCount() : null)
+                .totalReferrals(profile != null ? profile.getTotalReferrals() : null)
+                .referralCode(activeCode)
                 .build();
     }
 
@@ -78,14 +86,13 @@ public class InfluencerProfileService {
 
     @Transactional
     public void incrementTotalReferrals(Long userId) {
-        InfluencerProfile profile = influencerProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Influencer profile not found"));
-        profile.setTotalReferrals(profile.getTotalReferrals() + 1);
-        influencerProfileRepository.save(profile);
+        influencerProfileRepository.incrementTotalReferralsByUserId(userId);
     }
 
     private InfluencerProfileResponse toResponse(InfluencerProfile profile) {
         User user = profile.getUser();
+        // Live balance from wallet_transactions — the stale totalEarnings column is never updated.
+        BigDecimal walletBalance = walletService.getBalance(user.getId());
         return new InfluencerProfileResponse(
                 profile.getId(),
                 user.getId(),
@@ -96,7 +103,7 @@ public class InfluencerProfileService {
                 profile.getYoutubeUrl(),
                 profile.getFollowerCount(),
                 profile.getTotalReferrals(),
-                profile.getTotalEarnings(),
+                walletBalance,
                 profile.getCreatedAt()
         );
     }

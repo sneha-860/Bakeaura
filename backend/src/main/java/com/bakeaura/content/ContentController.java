@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -17,8 +18,11 @@ public class ContentController {
     private final ContentService contentService;
 
     @GetMapping("/feed")
-    public ResponseEntity<ApiResponse<List<FeedItem>>> getFeed() {
-        List<FeedItem> feed = contentService.getRankedFeed();
+    public ResponseEntity<ApiResponse<List<FeedItem>>> getFeed(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Long sellerId) {
+        List<FeedItem> feed = contentService.getRankedFeed(page, size, sellerId);
         return ResponseEntity.ok(ApiResponse.ok("Feed fetched successfully", feed));
     }
 }

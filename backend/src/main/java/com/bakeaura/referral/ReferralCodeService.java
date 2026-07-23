@@ -6,9 +6,9 @@ import com.bakeaura.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Random;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +41,11 @@ public class ReferralCodeService {
                 .toList();
     }
 
+    public String getActiveCodeByInfluencerId(Long influencerId) {
+        return referralCodeRepository.findByInfluencerIdAndIsActiveTrue(influencerId)
+                .stream().findFirst().map(ReferralCode::getCode).orElse(null);
+    }
+
     private String generateUniqueCode(User influencer) {
         String namePart = influencer.getName()
                 .toUpperCase()
@@ -49,7 +54,7 @@ public class ReferralCodeService {
 
         int year = LocalDateTime.now().getYear();
         String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        Random random = new Random();
+        SecureRandom random = new SecureRandom();
 
         for (int i = 0; i < 10; i++) {
             String suffix = String.valueOf(alphabet.charAt(random.nextInt(26)))
@@ -59,7 +64,7 @@ public class ReferralCodeService {
                 return code;
             }
         }
-        throw new RuntimeException("Could not generate unique referral code after 10 attempts");
+        throw new BadRequestException("Could not generate a unique referral code after 10 attempts — please retry the role promotion");
     }
 
     private ReferralCodeResponse toResponse(ReferralCode referralCode) {

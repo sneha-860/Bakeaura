@@ -29,6 +29,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 // CSRF disabled for REST APIs (not needed, we use JWT)
+                //Cross-Site Request Forgery
 
                 .sessionManagement(s ->
                         s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -55,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/sellers", "/api/sellers/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/sellers/*/reviews", "/api/sellers/*/reviews/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/influencers/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reels/**").permitAll()

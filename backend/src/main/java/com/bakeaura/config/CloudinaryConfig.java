@@ -21,10 +21,10 @@ import org.springframework.context.annotation.Configuration;
         @Bean
         public Cloudinary cloudinary() {
             return new Cloudinary(ObjectUtils.asMap(
-                    "cloud_name", cloudName,
-                    "api_key",    apiKey,
-                    "api_secret", apiSecret,
-                    "secure",     true   // always use https URLs
+                    "cloud_name", cloudName.trim(),
+                    "api_key",    apiKey.trim(),
+                    "api_secret", apiSecret.trim(),
+                    "secure",     true
             ));
         }
     }

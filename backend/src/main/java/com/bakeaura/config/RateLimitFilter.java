@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -19,6 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
+
+    // Set app.rate-limit.trust-proxy=true only in production behind a known reverse proxy
+    // (Railway/Render). Leave false in dev — clients can forge X-Forwarded-For otherwise.
+    @Value("${app.rate-limit.trust-proxy:false}")
+    private boolean trustProxy;
 
     // Per-IP bucket maps. MAX_ENTRIES prevents unbounded growth under heavy unique-IP traffic.
     // When the cap is hit the map is cleared — all IPs start fresh. Blunt but safe for a
@@ -92,9 +98,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String extractIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        if (trustProxy) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
         }
         return request.getRemoteAddr();
     }
