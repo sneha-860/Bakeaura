@@ -1,3 +1,4 @@
+
 package com.bakeaura.auth;
 
 import com.bakeaura.notification.EmailService;
@@ -142,6 +143,11 @@ public class AuthService {
                 user.getName(),
                 user.getRole(),
                 Boolean.TRUE.equals(user.getIsEmailVerified())
+
+                //user.getIsEmailVerified().equals(Boolean.TRUE)
+                //user.getIsEmailVerified() = null;
+                //null.equals(Boolean.TRUE)  
+                //NullPointerException
         );
     }
 

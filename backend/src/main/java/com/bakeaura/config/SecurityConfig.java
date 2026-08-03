@@ -28,7 +28,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
-                // CSRF disabled for REST APIs (not needed, we use JWT)
+                // CSRF disabled for REST APIs (not needed, we use JWT) is was used for browser-based forms to prevent malicious sites from submitting forms on behalf of the user.
                 //Cross-Site Request Forgery
 
                 .sessionManagement(s ->

@@ -55,3 +55,78 @@ export const useAuthStore = create(
         }
     )
 );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+===========================================================
+AUTH STORE (Zustand Global State)
+===========================================================
+
+Purpose:
+- Stores the authenticated user's session globally.
+- Maintains:
+    • User ID
+    • Name
+    • Email
+    • Role
+    • Access Token
+    • Refresh Token
+    • Authentication Status
+    • Email Verification Status
+    • Cart Count
+- Persists authentication data using localStorage.
+- Provides actions to:
+    • Login (setAuth)
+    • Logout
+    • Update Email Verification
+    • Update Cart Count
+    • Update User Name
+
+Flow:
+User Login →
+Backend Returns Tokens →
+setAuth() Updates Store →
+Axios Reads Tokens From Store →
+Authenticated API Requests
+
+This file is the single source of truth for user authentication
+throughout the frontend application.
+===========================================================
+*/

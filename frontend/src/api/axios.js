@@ -84,3 +84,68 @@ export function apiError(error) {
 }
 
 export default api;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+===========================================================
+API CLIENT (Axios Configuration)
+===========================================================
+
+Purpose:
+- Creates a centralized Axios instance for all backend API calls.
+- Automatically attaches the JWT access token to every request.
+- Handles expired access tokens using the refresh token.
+- Retries failed requests after a successful token refresh.
+- Redirects the user to login if authentication fails.
+- Provides common helper functions for extracting response data
+  and displaying API error messages.
+
+Flow:
+Login → Auth Store → Axios reads Access Token →
+API Request → Backend →
+401? → Refresh Token → Update Auth Store →
+Retry Original Request
+
+This file acts as the single gateway for all HTTP communication
+between the React frontend and the Spring Boot backend.
+===========================================================
+*/
